@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: appservicios_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=AppServicios_Pass_123!
+      - POSTGRES_DB=AppServiciosDb
+    ports:
+      - "5432:5432"
+    volumes:
+      - appservicios_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./AppServicios.Api
+      dockerfile: Dockerfile
+    container_name: appservicios_api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=AppServiciosDb;Username=postgres;Password=AppServicios_Pass_123!
+    ports:
+      - "5000:8080" # ASP.NET Core 8 utiliza el puerto 8080 por defecto
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  appservicios_db_data:

@@ -1,20 +1,22 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-WORKDIR /src
-
-COPY ["AppServicios.Api.csproj", "./"]
-RUN dotnet restore "AppServicios.Api.csproj"
-
-COPY . .
-RUN dotnet publish "AppServicios.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
-
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+USER app
 WORKDIR /app
-
-ENV ASPNETCORE_ENVIRONMENT=Production \
-    DOTNET_RUNNING_IN_CONTAINER=true
-
-COPY --from=build /app/publish .
-
 EXPOSE 8080
 
-ENTRYPOINT ["sh", "-c", "ASPNETCORE_URLS=http://+:${PORT:-8080} dotnet AppServicios.Api.dll"]
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+COPY ["AppServicios.Api.csproj", "."]
+RUN dotnet restore "./AppServicios.Api.csproj"
+COPY . .
+WORKDIR "/src/."
+RUN dotnet build "./AppServicios.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "./AppServicios.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "AppServicios.Api.dll"]

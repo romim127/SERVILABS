@@ -46,7 +46,8 @@ namespace AppServicios.Api.Migrations
                     FechaRegistro = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     PasswordHash = table.Column<string>(type: "text", nullable: false),
                     VerificadoRenaper = table.Column<bool>(type: "boolean", nullable: false),
-                    FechaVerificacion = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    FechaVerificacion = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    RecibeNotificaciones = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true)
                 },
                 constraints: table =>
                 {
@@ -78,6 +79,32 @@ namespace AppServicios.Api.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "AuditoriaEventos",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UsuarioId = table.Column<int>(type: "integer", nullable: true),
+                    Tipo = table.Column<string>(type: "text", nullable: false),
+                    Accion = table.Column<string>(type: "text", nullable: false),
+                    Descripcion = table.Column<string>(type: "text", nullable: false),
+                    Entidad = table.Column<string>(type: "text", nullable: false),
+                    EntidadId = table.Column<int>(type: "integer", nullable: true),
+                    Metadata = table.Column<string>(type: "text", nullable: false),
+                    Fecha = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AuditoriaEventos", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AuditoriaEventos_Usuarios_UsuarioId",
+                        column: x => x.UsuarioId,
+                        principalTable: "Usuarios",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Clientes",
                 columns: table => new
                 {
@@ -98,6 +125,59 @@ namespace AppServicios.Api.Migrations
                     table.PrimaryKey("PK_Clientes", x => x.Id);
                     table.ForeignKey(
                         name: "FK_Clientes_Usuarios_UsuarioId",
+                        column: x => x.UsuarioId,
+                        principalTable: "Usuarios",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Notificaciones",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UsuarioId = table.Column<int>(type: "integer", nullable: false),
+                    Titulo = table.Column<string>(type: "text", nullable: false),
+                    Mensaje = table.Column<string>(type: "text", nullable: false),
+                    Tipo = table.Column<string>(type: "text", nullable: false),
+                    SolicitudTrabajoId = table.Column<int>(type: "integer", nullable: true),
+                    Leida = table.Column<bool>(type: "boolean", nullable: false),
+                    FechaCreacion = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Notificaciones", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Notificaciones_Usuarios_UsuarioId",
+                        column: x => x.UsuarioId,
+                        principalTable: "Usuarios",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PagosProfesionales",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UsuarioId = table.Column<int>(type: "integer", nullable: false),
+                    Monto = table.Column<decimal>(type: "numeric", nullable: false),
+                    Moneda = table.Column<string>(type: "text", nullable: false),
+                    Concepto = table.Column<string>(type: "text", nullable: false),
+                    Estado = table.Column<string>(type: "text", nullable: false),
+                    Proveedor = table.Column<string>(type: "text", nullable: false),
+                    ReferenciaExterna = table.Column<string>(type: "text", nullable: false),
+                    Detalle = table.Column<string>(type: "text", nullable: false),
+                    FechaCreacion = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    FechaAprobacion = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PagosProfesionales", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PagosProfesionales_Usuarios_UsuarioId",
                         column: x => x.UsuarioId,
                         principalTable: "Usuarios",
                         principalColumn: "Id",
@@ -134,6 +214,54 @@ namespace AppServicios.Api.Migrations
                         principalTable: "Usuarios",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PushSubscriptions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UsuarioId = table.Column<int>(type: "integer", nullable: false),
+                    Endpoint = table.Column<string>(type: "text", nullable: false),
+                    P256dh = table.Column<string>(type: "text", nullable: false),
+                    Auth = table.Column<string>(type: "text", nullable: false),
+                    FechaCreacion = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PushSubscriptions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PushSubscriptions_Usuarios_UsuarioId",
+                        column: x => x.UsuarioId,
+                        principalTable: "Usuarios",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SesionesUsuario",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UsuarioId = table.Column<int>(type: "integer", nullable: false),
+                    FechaInicio = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    FechaFin = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    Ip = table.Column<string>(type: "text", nullable: true),
+                    UserAgent = table.Column<string>(type: "text", nullable: true),
+                    Exito = table.Column<bool>(type: "boolean", nullable: false),
+                    MotivoCierre = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SesionesUsuario", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_SesionesUsuario_Usuarios_UsuarioId",
+                        column: x => x.UsuarioId,
+                        principalTable: "Usuarios",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -239,9 +367,9 @@ namespace AppServicios.Api.Migrations
                     FechaAceptacion = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     FechaCompletacion = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     CalificacionProfesional = table.Column<int>(type: "integer", nullable: true),
-                    ComentarioProfesional = table.Column<string>(type: "text", nullable: false),
+                    ComentarioProfesional = table.Column<string>(type: "text", nullable: true),
                     CalificacionCliente = table.Column<int>(type: "integer", nullable: true),
-                    ComentarioCliente = table.Column<string>(type: "text", nullable: false)
+                    ComentarioCliente = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -266,6 +394,35 @@ namespace AppServicios.Api.Migrations
                         onDelete: ReferentialAction.Restrict);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "MensajesSolicitud",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    SolicitudTrabajoId = table.Column<int>(type: "integer", nullable: false),
+                    UsuarioId = table.Column<int>(type: "integer", nullable: false),
+                    RemitenteNombre = table.Column<string>(type: "text", nullable: false),
+                    Contenido = table.Column<string>(type: "text", nullable: false),
+                    FechaEnvio = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_MensajesSolicitud", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_MensajesSolicitud_SolicitudesTrabajo_SolicitudTrabajoId",
+                        column: x => x.SolicitudTrabajoId,
+                        principalTable: "SolicitudesTrabajo",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_MensajesSolicitud_Usuarios_UsuarioId",
+                        column: x => x.UsuarioId,
+                        principalTable: "Usuarios",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
             migrationBuilder.InsertData(
                 table: "Rubros",
                 columns: new[] { "Id", "Activo", "Descripcion", "Icono", "Nombre" },
@@ -278,8 +435,25 @@ namespace AppServicios.Api.Migrations
                     { 5, true, "Reparación de vehículos", "mecanica", "Mecánica" },
                     { 6, true, "Trabajo en metal", "metalurgia", "Metalurgia" },
                     { 7, true, "Servicios de soldadura", "soldadura", "Soldadura" },
-                    { 8, true, "Reparaciones técnicas", "tecnica", "Técnica" }
+                    { 8, true, "Reparaciones técnicas", "tecnica", "Técnica" },
+                    { 9, true, "Software, soporte IT, redes y servicios digitales", "tecnologia-sistemas", "Tecnología y Sistemas" },
+                    { 10, true, "Atención clínica, cuidados y asistencia sanitaria", "salud-enfermeria", "Salud y Enfermería" },
+                    { 11, true, "Procesos productivos, planta y operación técnica", "produccion-manufactura", "Producción, Manufactura y Operarios" },
+                    { 12, true, "Ventas, reparto, logística y atención comercial", "comercio-logistica", "Comercio Ventas y Logística" },
+                    { 13, true, "Gestión administrativa, contable y financiera", "administracion-finanzas", "Administración Contabilidad y Finanzas" },
+                    { 14, true, "Hotelería, turismo, cocina y atención gastronómica", "hosteleria-gastronomia", "Hostelería Turismo y Gastronomía" },
+                    { 15, true, "Obra, mantenimiento general y servicios técnicos", "construccion-servicios", "Construcción y Servicios Generales" }
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AuditoriaEventos_Fecha_Tipo",
+                table: "AuditoriaEventos",
+                columns: new[] { "Fecha", "Tipo" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AuditoriaEventos_UsuarioId",
+                table: "AuditoriaEventos",
+                column: "UsuarioId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Certificados_ProfesionalId",
@@ -298,6 +472,32 @@ namespace AppServicios.Api.Migrations
                 column: "ClienteId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_MensajesSolicitud_SolicitudTrabajoId_FechaEnvio",
+                table: "MensajesSolicitud",
+                columns: new[] { "SolicitudTrabajoId", "FechaEnvio" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MensajesSolicitud_UsuarioId",
+                table: "MensajesSolicitud",
+                column: "UsuarioId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Notificaciones_UsuarioId",
+                table: "Notificaciones",
+                column: "UsuarioId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PagosProfesionales_ReferenciaExterna",
+                table: "PagosProfesionales",
+                column: "ReferenciaExterna",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PagosProfesionales_UsuarioId",
+                table: "PagosProfesionales",
+                column: "UsuarioId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Profesionales_UsuarioId",
                 table: "Profesionales",
                 column: "UsuarioId",
@@ -309,9 +509,19 @@ namespace AppServicios.Api.Migrations
                 column: "RubrosProfesionalesId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PushSubscriptions_UsuarioId",
+                table: "PushSubscriptions",
+                column: "UsuarioId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Servicios_RubroId",
                 table: "Servicios",
                 column: "RubroId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SesionesUsuario_UsuarioId",
+                table: "SesionesUsuario",
+                column: "UsuarioId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_SolicitudesTrabajo_ClienteId",
@@ -345,13 +555,31 @@ namespace AppServicios.Api.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "AuditoriaEventos");
+
+            migrationBuilder.DropTable(
                 name: "Certificados");
 
             migrationBuilder.DropTable(
                 name: "Direcciones");
 
             migrationBuilder.DropTable(
+                name: "MensajesSolicitud");
+
+            migrationBuilder.DropTable(
+                name: "Notificaciones");
+
+            migrationBuilder.DropTable(
+                name: "PagosProfesionales");
+
+            migrationBuilder.DropTable(
                 name: "ProfesionalRubro");
+
+            migrationBuilder.DropTable(
+                name: "PushSubscriptions");
+
+            migrationBuilder.DropTable(
+                name: "SesionesUsuario");
 
             migrationBuilder.DropTable(
                 name: "SolicitudesTrabajo");

@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AppServicios.Api.Migrations
 {
     [DbContext(typeof(AppServiciosDbContext))]
-    [Migration("20260403012929_EnableNotificationsByDefault")]
-    partial class EnableNotificationsByDefault
+    [Migration("20260522012524_InitialPostgres")]
+    partial class InitialPostgres
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -24,6 +24,52 @@ namespace AppServicios.Api.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("AppServicios.Api.Domain.AuditoriaEvento", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Accion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Descripcion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Entidad")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("EntidadId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Fecha")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.HasIndex("Fecha", "Tipo");
+
+                    b.ToTable("AuditoriaEventos");
+                });
 
             modelBuilder.Entity("AppServicios.Api.Domain.Certificado", b =>
                 {
@@ -164,6 +210,40 @@ namespace AppServicios.Api.Migrations
                     b.HasIndex("ClienteId");
 
                     b.ToTable("Direcciones");
+                });
+
+            modelBuilder.Entity("AppServicios.Api.Domain.MensajeSolicitud", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Contenido")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("FechaEnvio")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RemitenteNombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SolicitudTrabajoId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.HasIndex("SolicitudTrabajoId", "FechaEnvio");
+
+                    b.ToTable("MensajesSolicitud");
                 });
 
             modelBuilder.Entity("AppServicios.Api.Domain.Notificacion", b =>
@@ -317,6 +397,39 @@ namespace AppServicios.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("Profesionales");
+                });
+
+            modelBuilder.Entity("AppServicios.Api.Domain.PushSubscription", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Auth")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("P256dh")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("PushSubscriptions");
                 });
 
             modelBuilder.Entity("AppServicios.Api.Domain.Rubro", b =>
@@ -505,6 +618,42 @@ namespace AppServicios.Api.Migrations
                     b.ToTable("Servicios");
                 });
 
+            modelBuilder.Entity("AppServicios.Api.Domain.SesionUsuario", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Exito")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("FechaFin")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaInicio")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Ip")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MotivoCierre")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserAgent")
+                        .HasColumnType("text");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("SesionesUsuario");
+                });
+
             modelBuilder.Entity("AppServicios.Api.Domain.SolicitudTrabajo", b =>
                 {
                     b.Property<int>("Id")
@@ -668,6 +817,16 @@ namespace AppServicios.Api.Migrations
                     b.ToTable("ProfesionalRubro");
                 });
 
+            modelBuilder.Entity("AppServicios.Api.Domain.AuditoriaEvento", b =>
+                {
+                    b.HasOne("AppServicios.Api.Domain.Usuario", "Usuario")
+                        .WithMany("AuditoriaEventos")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("AppServicios.Api.Domain.Certificado", b =>
                 {
                     b.HasOne("AppServicios.Api.Domain.Profesional", "Profesional")
@@ -699,6 +858,25 @@ namespace AppServicios.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Cliente");
+                });
+
+            modelBuilder.Entity("AppServicios.Api.Domain.MensajeSolicitud", b =>
+                {
+                    b.HasOne("AppServicios.Api.Domain.SolicitudTrabajo", "SolicitudTrabajo")
+                        .WithMany("Mensajes")
+                        .HasForeignKey("SolicitudTrabajoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AppServicios.Api.Domain.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SolicitudTrabajo");
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("AppServicios.Api.Domain.Notificacion", b =>
@@ -734,6 +912,17 @@ namespace AppServicios.Api.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("AppServicios.Api.Domain.PushSubscription", b =>
+                {
+                    b.HasOne("AppServicios.Api.Domain.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("AppServicios.Api.Domain.Servicio", b =>
                 {
                     b.HasOne("AppServicios.Api.Domain.Rubro", "Rubro")
@@ -743,6 +932,17 @@ namespace AppServicios.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Rubro");
+                });
+
+            modelBuilder.Entity("AppServicios.Api.Domain.SesionUsuario", b =>
+                {
+                    b.HasOne("AppServicios.Api.Domain.Usuario", "Usuario")
+                        .WithMany("SesionesUsuario")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("AppServicios.Api.Domain.SolicitudTrabajo", b =>
@@ -810,13 +1010,22 @@ namespace AppServicios.Api.Migrations
                     b.Navigation("SolicitudesTrabajo");
                 });
 
+            modelBuilder.Entity("AppServicios.Api.Domain.SolicitudTrabajo", b =>
+                {
+                    b.Navigation("Mensajes");
+                });
+
             modelBuilder.Entity("AppServicios.Api.Domain.Usuario", b =>
                 {
+                    b.Navigation("AuditoriaEventos");
+
                     b.Navigation("Cliente");
 
                     b.Navigation("Notificaciones");
 
                     b.Navigation("Profesional");
+
+                    b.Navigation("SesionesUsuario");
                 });
 #pragma warning restore 612, 618
         }
