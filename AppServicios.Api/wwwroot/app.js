@@ -38,8 +38,11 @@ async function subscribeToPushNotifications() {
   if (permission !== 'granted') return;
   let subscription = await reg.pushManager.getSubscription();
   if (!subscription) {
-    // Reemplaza esta clave por tu VAPID public key
-    const vapidPublicKey = 'REEMPLAZAR_CON_TU_CLAVE_VAPID_PUBLICA';
+    const keyResponse = await fetch('/api/Push/public-key');
+    if (!keyResponse.ok) return;
+    const keyPayload = await keyResponse.json();
+    const vapidPublicKey = keyPayload.publicKey;
+    if (!vapidPublicKey) return;
     const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
     subscription = await reg.pushManager.subscribe({
       userVisibleOnly: true,
@@ -790,6 +793,7 @@ function escapeHtml(value) {
 
 async function extractApiError(response) {
   try {
+    const contentType = response.headers.get('content-type') || '';
     hydrateMapGeoCache();
     hydrateCurrentDeviceLocation();
 

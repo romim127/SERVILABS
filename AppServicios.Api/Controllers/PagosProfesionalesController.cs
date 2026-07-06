@@ -5,6 +5,7 @@ using AppServicios.Api.Data;
 using AppServicios.Api.Domain;
 using AppServicios.Api.DTOs;
 using AppServicios.Api.Helpers;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,6 +29,7 @@ namespace AppServicios.Api.Controllers
             _configuration = configuration;
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpGet]
         public async Task<ActionResult<IEnumerable<PagoProfesionalDto>>> GetAll()
         {
@@ -40,6 +42,7 @@ namespace AppServicios.Api.Controllers
             return Ok(items.Select(ToDto));
         }
 
+        [Authorize]
         [HttpGet("{id:int}")]
         public async Task<ActionResult<PagoProfesionalDto>> GetById(int id)
         {
@@ -89,6 +92,7 @@ namespace AppServicios.Api.Controllers
             return CreatedAtAction(nameof(GetById), new { id = pago.Id }, ToDto(pago));
         }
 
+        [Authorize]
         [HttpPost("{id:int}/mercadopago/preference")]
         public async Task<ActionResult<MercadoPagoPreferenceDto>> CreateMercadoPagoPreference(int id)
         {
@@ -172,6 +176,7 @@ namespace AppServicios.Api.Controllers
                 "Orden generada. Se habilitó Mercado Pago para completar el cobro en una nueva pestaña."));
         }
 
+        [Authorize]
         [HttpPost("{id:int}/mercadopago/verificar")]
         public async Task<ActionResult<MercadoPagoVerificationDto>> VerifyMercadoPagoPayment(int id)
         {
@@ -252,6 +257,7 @@ namespace AppServicios.Api.Controllers
                 message));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpPost("{id:int}/confirmar")]
         public async Task<ActionResult<PagoProfesionalDto>> Confirmar(int id)
         {
@@ -285,6 +291,7 @@ namespace AppServicios.Api.Controllers
             return Ok(ToDto(pago));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpPost("{id:int}/rechazar")]
         public async Task<ActionResult<PagoProfesionalDto>> Rechazar(int id)
         {

@@ -5,6 +5,7 @@ using AppServicios.Api.Data;
 using AppServicios.Api.DTOs;
 using AppServicios.Api.Helpers;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -17,11 +18,16 @@ namespace AppServicios.Api.Controllers
     {
         private readonly AppServiciosDbContext _context;
         private readonly IConfiguration _configuration;
+        private readonly IPasswordHasher<AppServicios.Api.Domain.Usuario> _passwordHasher;
 
-        public AuthController(AppServiciosDbContext context, IConfiguration configuration)
+        public AuthController(
+            AppServiciosDbContext context,
+            IConfiguration configuration,
+            IPasswordHasher<AppServicios.Api.Domain.Usuario> passwordHasher)
         {
             _context = context;
             _configuration = configuration;
+            _passwordHasher = passwordHasher;
         }
 
         [HttpPost("login")]
@@ -38,7 +44,14 @@ namespace AppServicios.Api.Controllers
             var usuario = await _context.Usuarios
                 .FirstOrDefaultAsync(u => u.Email == email);
 
-            bool loginExitoso = usuario != null && string.Equals(usuario.PasswordHash, password, StringComparison.Ordinal) && usuario.Activo;
+            var passwordVerification = usuario is null
+                ? PasswordVerificationResult.Failed
+                : _passwordHasher.VerifyHashedPassword(usuario, usuario.PasswordHash, password);
+            var legacyPlaintextMatch = usuario is not null
+                && passwordVerification == PasswordVerificationResult.Failed
+                && string.Equals(usuario.PasswordHash, password, StringComparison.Ordinal);
+            var passwordMatches = passwordVerification != PasswordVerificationResult.Failed || legacyPlaintextMatch;
+            bool loginExitoso = usuario != null && passwordMatches && usuario.Activo;
 
             // Captura IP y UserAgent
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -47,6 +60,11 @@ namespace AppServicios.Api.Controllers
             // Registrar sesión
             if (usuario != null)
             {
+                if (loginExitoso && (legacyPlaintextMatch || passwordVerification == PasswordVerificationResult.SuccessRehashNeeded))
+                {
+                    usuario.PasswordHash = _passwordHasher.HashPassword(usuario, password);
+                }
+
                 var sesion = new Domain.SesionUsuario
                 {
                     UsuarioId = usuario.Id,
@@ -61,7 +79,7 @@ namespace AppServicios.Api.Controllers
                 await _context.SaveChangesAsync();
             }
 
-            if (usuario is null || !string.Equals(usuario.PasswordHash, password, StringComparison.Ordinal))
+            if (usuario is null || !passwordMatches)
             {
                 return Unauthorized("Email o contraseña incorrectos.");
             }

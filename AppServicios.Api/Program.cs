@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using AppServicios.Api.Data;
 using AppServicios.Api.Domain;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
@@ -13,17 +14,32 @@ var builder = WebApplication.CreateBuilder(args);
 var defaultConnection = ResolveConnectionString(builder.Configuration, builder.Environment);
 builder.Services.AddDbContext<AppServiciosDbContext>(options =>
     options.UseNpgsql(defaultConnection));
+builder.Services.AddScoped<IPasswordHasher<Usuario>, PasswordHasher<Usuario>>();
 
 // Registrar PushNotificationService
 builder.Services.AddSingleton<AppServicios.Api.Services.PushNotificationService>();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", builder =>
+    options.AddPolicy("AllowAll", policy =>
     {
-        builder.AllowAnyOrigin()
-               .AllowAnyMethod()
-               .AllowAnyHeader();
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+            return;
+        }
+
+        if (allowedOrigins.Length == 0)
+        {
+            throw new InvalidOperationException("Configura Cors:AllowedOrigins con el dominio productivo antes de iniciar en producción.");
+        }
+
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyMethod()
+              .AllowAnyHeader();
     });
 });
 
@@ -36,6 +52,10 @@ builder.Services.AddHttpClient();
 builder.Services.AddOpenApi();
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "AppServicios-Dev-Key-2026-Segura-Preview-32CharsMin";
+if (!builder.Environment.IsDevelopment() && jwtKey == "AppServicios-Dev-Key-2026-Segura-Preview-32CharsMin")
+{
+    throw new InvalidOperationException("Configura Jwt:Key con un secreto productivo antes de iniciar en producción.");
+}
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "AppServicios.Api";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "AppServicios.Client";
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
@@ -69,7 +89,11 @@ using (var scope = app.Services.CreateScope())
     try
     {
         await db.Database.MigrateAsync();
-        await EnsureDemoAdminAsync(db);
+        if (app.Environment.IsDevelopment())
+        {
+            var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<Usuario>>();
+            await EnsureDemoAdminAsync(db, passwordHasher);
+        }
     }
     catch (Exception ex)
     {
@@ -166,7 +190,7 @@ static string ConvertDatabaseUrlToNpgsql(string databaseUrl)
     return builder.ConnectionString;
 }
 
-static async Task EnsureDemoAdminAsync(AppServiciosDbContext db)
+static async Task EnsureDemoAdminAsync(AppServiciosDbContext db, IPasswordHasher<Usuario> passwordHasher)
 {
     const string adminEmail = "admin@appservicios.com";
     const string adminPassword = "Admin123!";
@@ -184,7 +208,7 @@ static async Task EnsureDemoAdminAsync(AppServiciosDbContext db)
             Rol = "Administrador",
             Activo = true,
             FechaRegistro = DateTime.UtcNow,
-            PasswordHash = adminPassword,
+            PasswordHash = passwordHasher.HashPassword(null!, adminPassword),
             VerificadoRenaper = true,
             FechaVerificacion = DateTime.UtcNow,
             RecibeNotificaciones = true
@@ -194,7 +218,7 @@ static async Task EnsureDemoAdminAsync(AppServiciosDbContext db)
     {
         admin.Rol = "Administrador";
         admin.Activo = true;
-        admin.PasswordHash = adminPassword;
+        admin.PasswordHash = passwordHasher.HashPassword(admin, adminPassword);
         admin.RecibeNotificaciones = true;
     }
 
@@ -216,7 +240,7 @@ static async Task EnsureDemoAdminAsync(AppServiciosDbContext db)
             Rol = "Cliente",
             Activo = true,
             FechaRegistro = DateTime.UtcNow,
-            PasswordHash = testClientPassword,
+            PasswordHash = passwordHasher.HashPassword(null!, testClientPassword),
             VerificadoRenaper = false,
             RecibeNotificaciones = true
         };
@@ -245,7 +269,7 @@ static async Task EnsureDemoAdminAsync(AppServiciosDbContext db)
             Rol = "Profesional",
             Activo = true,
             FechaRegistro = DateTime.UtcNow,
-            PasswordHash = testProPassword,
+            PasswordHash = passwordHasher.HashPassword(null!, testProPassword),
             VerificadoRenaper = true,
             FechaVerificacion = DateTime.UtcNow,
             RecibeNotificaciones = true

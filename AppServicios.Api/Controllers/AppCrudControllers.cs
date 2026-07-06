@@ -4,6 +4,7 @@ using AppServicios.Api.Domain;
 using AppServicios.Api.DTOs;
 using AppServicios.Api.Helpers;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,12 +15,15 @@ namespace AppServicios.Api.Controllers
     public sealed class UsuariosController : ControllerBase
     {
         private readonly AppServiciosDbContext _context;
+        private readonly IPasswordHasher<Usuario> _passwordHasher;
 
-        public UsuariosController(AppServiciosDbContext context)
+        public UsuariosController(AppServiciosDbContext context, IPasswordHasher<Usuario> passwordHasher)
         {
             _context = context;
+            _passwordHasher = passwordHasher;
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpGet]
         public async Task<ActionResult<IEnumerable<UsuarioDto>>> GetAll()
         {
@@ -31,6 +35,7 @@ namespace AppServicios.Api.Controllers
             return Ok(items.Select(ToDto));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpGet("{id:int}")]
         public async Task<ActionResult<UsuarioDto>> GetById(int id)
         {
@@ -65,6 +70,7 @@ namespace AppServicios.Api.Controllers
             return CreatedAtAction(nameof(GetById), new { id = usuario.Id }, ToDto(usuario));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpPut("{id:int}")]
         public async Task<ActionResult<UsuarioDto>> Update(int id, [FromBody] UsuarioUpsertDto request)
         {
@@ -95,6 +101,7 @@ namespace AppServicios.Api.Controllers
             return Ok(ToDto(usuario));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -141,6 +148,16 @@ namespace AppServicios.Api.Controllers
             {
                 ModelState.AddModelError(nameof(request.PasswordHash), "La contraseña/hash es obligatoria al crear un usuario.");
             }
+
+            if (!currentId.HasValue && !User.IsInRole("Administrador"))
+            {
+                var requestedRole = request.Rol?.Trim() ?? string.Empty;
+                if (!string.Equals(requestedRole, "Cliente", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(requestedRole, "Profesional", StringComparison.OrdinalIgnoreCase))
+                {
+                    ModelState.AddModelError(nameof(request.Rol), "El registro público solo permite crear cuentas Cliente o Profesional.");
+                }
+            }
         }
 
         private static UsuarioDto ToDto(Usuario usuario) => new(
@@ -157,7 +174,7 @@ namespace AppServicios.Api.Controllers
             usuario.FechaVerificacion,
             usuario.RecibeNotificaciones);
 
-        private static void MapToEntity(UsuarioUpsertDto request, Usuario usuario, bool isCreate)
+        private void MapToEntity(UsuarioUpsertDto request, Usuario usuario, bool isCreate)
         {
             usuario.Nombre = request.Nombre.Trim();
             usuario.Email = request.Email.Trim();
@@ -173,7 +190,7 @@ namespace AppServicios.Api.Controllers
 
             if (!string.IsNullOrWhiteSpace(request.PasswordHash))
             {
-                usuario.PasswordHash = request.PasswordHash.Trim();
+                usuario.PasswordHash = _passwordHasher.HashPassword(usuario, request.PasswordHash.Trim());
             }
             else if (isCreate)
             {
@@ -245,6 +262,7 @@ namespace AppServicios.Api.Controllers
             return CreatedAtAction(nameof(GetById), new { id = profesional.Id }, ToDto(profesional));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpPut("{id:int}")]
         public async Task<ActionResult<ProfesionalDto>> Update(int id, [FromBody] ProfesionalUpsertDto request)
         {
@@ -277,6 +295,7 @@ namespace AppServicios.Api.Controllers
             return Ok(ToDto(profesional));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -434,6 +453,7 @@ namespace AppServicios.Api.Controllers
             return CreatedAtAction(nameof(GetById), new { id = cliente.Id }, ToDto(cliente));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpPut("{id:int}")]
         public async Task<ActionResult<ClienteDto>> Update(int id, [FromBody] ClienteUpsertDto request)
         {
@@ -457,6 +477,7 @@ namespace AppServicios.Api.Controllers
             return Ok(ToDto(cliente));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -551,6 +572,7 @@ namespace AppServicios.Api.Controllers
             return rubro is null ? NotFound() : Ok(ToDto(rubro));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpPost]
         public async Task<ActionResult<RubroDto>> Create([FromBody] RubroUpsertDto request)
         {
@@ -569,6 +591,7 @@ namespace AppServicios.Api.Controllers
             return CreatedAtAction(nameof(GetById), new { id = rubro.Id }, ToDto(rubro));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpPut("{id:int}")]
         public async Task<ActionResult<RubroDto>> Update(int id, [FromBody] RubroUpsertDto request)
         {
@@ -590,6 +613,7 @@ namespace AppServicios.Api.Controllers
             return Ok(ToDto(rubro));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -666,6 +690,7 @@ namespace AppServicios.Api.Controllers
             return servicio is null ? NotFound() : Ok(ToDto(servicio));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpPost]
         public async Task<ActionResult<ServicioDto>> Create([FromBody] ServicioUpsertDto request)
         {
@@ -684,6 +709,7 @@ namespace AppServicios.Api.Controllers
             return CreatedAtAction(nameof(GetById), new { id = servicio.Id }, ToDto(servicio));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpPut("{id:int}")]
         public async Task<ActionResult<ServicioDto>> Update(int id, [FromBody] ServicioUpsertDto request)
         {
@@ -709,6 +735,7 @@ namespace AppServicios.Api.Controllers
             return Ok(ToDto(servicio));
         }
 
+        [Authorize(Roles = "Administrador")]
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -1459,6 +1486,7 @@ namespace AppServicios.Api.Controllers
     }
 
     [ApiController]
+    [Authorize]
     [Route("api/[controller]")]
     public sealed class CertificadosController : CrudControllerBase<Certificado>
     {
@@ -1466,6 +1494,7 @@ namespace AppServicios.Api.Controllers
     }
 
     [ApiController]
+    [Authorize]
     [Route("api/[controller]")]
     public sealed class DireccionesController : CrudControllerBase<Direccion>
     {

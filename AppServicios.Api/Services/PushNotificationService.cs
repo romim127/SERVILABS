@@ -23,6 +23,11 @@ namespace AppServicios.Api.Services
             var vapidPrivateKey = _config["VAPID:PrivateKey"];
             var subject = _config["VAPID:Subject"] ?? "mailto:admin@tudominio.com";
 
+            if (string.IsNullOrWhiteSpace(vapidPublicKey) || string.IsNullOrWhiteSpace(vapidPrivateKey))
+            {
+                return;
+            }
+
             // Payload
             var payload = JsonSerializer.Serialize(new { title, body, url });
 

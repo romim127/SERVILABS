@@ -20,6 +20,17 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=AppServiciosDb;Username=postgres;Password=AppServicios_Pass_123!
+      - Jwt__Key=${JWT_KEY:?Configura JWT_KEY con un secreto productivo}
+      - Cors__AllowedOrigins__0=${APP_PUBLIC_URL:?Configura APP_PUBLIC_URL con el dominio público}
+      - MercadoPago__AccessToken=${MERCADOPAGO_ACCESS_TOKEN:-}
+      - MercadoPago__PublicKey=${MERCADOPAGO_PUBLIC_KEY:-}
+      - MercadoPago__UseSandbox=${MERCADOPAGO_USE_SANDBOX:-false}
+      - MercadoPago__SuccessUrl=${APP_PUBLIC_URL}/pago-resultado.html?status=success
+      - MercadoPago__FailureUrl=${APP_PUBLIC_URL}/pago-resultado.html?status=failure
+      - MercadoPago__PendingUrl=${APP_PUBLIC_URL}/pago-resultado.html?status=pending
+      - VAPID__PublicKey=${VAPID_PUBLIC_KEY:-}
+      - VAPID__PrivateKey=${VAPID_PRIVATE_KEY:-}
+      - VAPID__Subject=${VAPID_SUBJECT:-mailto:admin@appservicios.com}
     ports:
       - "5000:8080" # ASP.NET Core 8 utiliza el puerto 8080 por defecto
     depends_on:

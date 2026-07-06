@@ -4,6 +4,7 @@ using AppServicios.Api.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace AppServicios.Api.Controllers
@@ -14,15 +15,32 @@ namespace AppServicios.Api.Controllers
     public class PushController : ControllerBase
     {
         private readonly AppServiciosDbContext _context;
-        public PushController(AppServiciosDbContext context)
+        private readonly IConfiguration _configuration;
+
+        public PushController(AppServiciosDbContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
+        }
+
+        [AllowAnonymous]
+        [HttpGet("public-key")]
+        public ActionResult<object> GetPublicKey()
+        {
+            var publicKey = _configuration["VAPID:PublicKey"];
+            if (string.IsNullOrWhiteSpace(publicKey))
+            {
+                return NotFound(new { message = "Las notificaciones push no están configuradas." });
+            }
+
+            return Ok(new { publicKey });
         }
 
         [HttpPost("subscribe")]
         public async Task<IActionResult> Subscribe([FromBody] PushSubscriptionDto dto)
         {
-            var claimUserId = User?.Identity?.IsAuthenticated == true ? int.Parse(User.FindFirst("sub")?.Value ?? "0") : 0;
+            var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            var claimUserId = int.TryParse(rawUserId, out var userId) ? userId : 0;
             if (claimUserId != dto.UsuarioId)
                 return Forbid();
 
