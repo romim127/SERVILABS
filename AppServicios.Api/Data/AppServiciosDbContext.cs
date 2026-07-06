@@ -23,7 +23,8 @@ namespace AppServicios.Api.Data
         public DbSet<AuditoriaEvento> AuditoriaEventos { get; set; }
         public DbSet<Certificado> Certificados { get; set; }
         public DbSet<Direccion> Direcciones { get; set; }
-    public DbSet<SesionUsuario> SesionesUsuario { get; set; }
+        public DbSet<SesionUsuario> SesionesUsuario { get; set; }
+        public DbSet<IpBloqueada> IpsBloqueadas { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -155,6 +156,10 @@ namespace AppServicios.Api.Data
 
             modelBuilder.Entity<AuditoriaEvento>()
                 .HasIndex(a => new { a.Fecha, a.Tipo });
+
+            modelBuilder.Entity<IpBloqueada>()
+                .HasIndex(i => i.Ip)
+                .IsUnique();
 
             // Seed datos iniciales
             modelBuilder.Entity<Rubro>().HasData(

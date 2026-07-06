@@ -94,6 +94,9 @@ using (var scope = app.Services.CreateScope())
             var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<Usuario>>();
             await EnsureDemoAdminAsync(db, passwordHasher);
         }
+
+        var superAdminPasswordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<Usuario>>();
+        await EnsureSuperAdminAsync(db, builder.Configuration, superAdminPasswordHasher, logger);
     }
     catch (Exception ex)
     {
@@ -288,6 +291,64 @@ static async Task EnsureDemoAdminAsync(AppServiciosDbContext db, IPasswordHasher
     }
 
     await db.SaveChangesAsync();
+}
+
+static async Task EnsureSuperAdminAsync(
+    AppServiciosDbContext db,
+    IConfiguration configuration,
+    IPasswordHasher<Usuario> passwordHasher,
+    ILogger logger)
+{
+    var email = configuration["SuperAdmin:Email"]?.Trim();
+    var password = configuration["SuperAdmin:Password"];
+
+    if (string.IsNullOrWhiteSpace(email))
+    {
+        logger.LogWarning("SuperAdmin:Email no está configurado. No se creó Super Admin.");
+        return;
+    }
+
+    if (string.IsNullOrWhiteSpace(password) || password.Length < 16)
+    {
+        logger.LogWarning("SuperAdmin:Password no está configurado o tiene menos de 16 caracteres. No se creó Super Admin.");
+        return;
+    }
+
+    var normalizedEmail = email.ToLowerInvariant();
+    var superAdmin = await db.Usuarios.FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
+    if (superAdmin is null)
+    {
+        superAdmin = new Usuario
+        {
+            Nombre = configuration["SuperAdmin:Name"]?.Trim() ?? "Super Admin AppServicios",
+            Email = normalizedEmail,
+            Telefono = configuration["SuperAdmin:Phone"]?.Trim() ?? "0000000000",
+            DNI = configuration["SuperAdmin:Dni"]?.Trim() ?? "00000000",
+            FechaNacimiento = new DateTime(1990, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            Rol = "Administrador",
+            Activo = true,
+            FechaRegistro = DateTime.UtcNow,
+            VerificadoRenaper = true,
+            FechaVerificacion = DateTime.UtcNow,
+            RecibeNotificaciones = true
+        };
+        superAdmin.PasswordHash = passwordHasher.HashPassword(superAdmin, password);
+        db.Usuarios.Add(superAdmin);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Super Admin creado desde configuración.");
+        return;
+    }
+
+    superAdmin.Nombre = string.IsNullOrWhiteSpace(configuration["SuperAdmin:Name"])
+        ? superAdmin.Nombre
+        : configuration["SuperAdmin:Name"]!.Trim();
+    superAdmin.Rol = "Administrador";
+    superAdmin.Activo = true;
+    superAdmin.VerificadoRenaper = true;
+    superAdmin.FechaVerificacion ??= DateTime.UtcNow;
+    superAdmin.PasswordHash = passwordHasher.HashPassword(superAdmin, password);
+    await db.SaveChangesAsync();
+    logger.LogInformation("Super Admin actualizado desde configuración.");
 }
 
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)

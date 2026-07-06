@@ -104,4 +104,25 @@ namespace AppServicios.Api.DTOs
         [StringLength(250, ErrorMessage = "El motivo no puede superar los 250 caracteres.")]
         public string Motivo { get; set; } = string.Empty;
     }
+
+    public sealed record IpBloqueadaDto(
+        int Id,
+        string Ip,
+        string Motivo,
+        int IntentosFallidos,
+        bool Activa,
+        DateTime FechaCreacion,
+        DateTime? FechaUltimoIntento,
+        DateTime? FechaDesbloqueo,
+        string DesbloqueadoPor);
+
+    public sealed class DesbloquearIpDto
+    {
+        [Required]
+        [StringLength(100)]
+        public string Ip { get; set; } = string.Empty;
+
+        [StringLength(250)]
+        public string Motivo { get; set; } = string.Empty;
+    }
 }

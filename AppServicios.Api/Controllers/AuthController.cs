@@ -40,6 +40,23 @@ namespace AppServicios.Api.Controllers
 
             var email = request.Email.Trim();
             var password = request.Password ?? string.Empty;
+            var ip = GetRequestIp();
+            var userAgent = Request.Headers["User-Agent"].ToString();
+
+            if (await IsIpBlockedAsync(ip))
+            {
+                await AuditoriaHelper.RegistrarAsync(
+                    _context,
+                    null,
+                    "Seguridad",
+                    "IP bloqueada",
+                    "Intento de login rechazado por IP bloqueada.",
+                    "IpBloqueada",
+                    null,
+                    $"{ip} | email={email}");
+
+                return StatusCode(StatusCodes.Status429TooManyRequests, "Demasiados intentos fallidos. Contacta al administrador.");
+            }
 
             var usuario = await _context.Usuarios
                 .FirstOrDefaultAsync(u => u.Email == email);
@@ -52,10 +69,6 @@ namespace AppServicios.Api.Controllers
                 && string.Equals(usuario.PasswordHash, password, StringComparison.Ordinal);
             var passwordMatches = passwordVerification != PasswordVerificationResult.Failed || legacyPlaintextMatch;
             bool loginExitoso = usuario != null && passwordMatches && usuario.Activo;
-
-            // Captura IP y UserAgent
-            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-            var userAgent = Request.Headers["User-Agent"].ToString();
 
             // Registrar sesión
             if (usuario != null)
@@ -79,6 +92,11 @@ namespace AppServicios.Api.Controllers
                 await _context.SaveChangesAsync();
             }
 
+            if (!passwordMatches && IsSuperAdminEmail(email))
+            {
+                await RegisterFailedSuperAdminAttemptAsync(ip, email);
+            }
+
             if (usuario is null || !passwordMatches)
             {
                 return Unauthorized("Email o contraseña incorrectos.");
@@ -87,6 +105,11 @@ namespace AppServicios.Api.Controllers
             if (!usuario.Activo)
             {
                 return Unauthorized("Tu cuenta está suspendida. Contacta al administrador.");
+            }
+
+            if (IsSuperAdminEmail(usuario.Email))
+            {
+                await ClearIpFailedAttemptsAsync(ip, "Login correcto de Super Admin");
             }
 
             var (accessToken, accessTokenExpiresAt) = GenerateJwtToken(usuario);
@@ -191,5 +214,105 @@ namespace AppServicios.Api.Controllers
         }
 
         private bool IsCurrentUserAdmin() => User.IsInRole("Administrador");
+
+        private bool IsSuperAdminEmail(string email)
+        {
+            var configured = _configuration["SuperAdmin:Email"]?.Trim();
+            return !string.IsNullOrWhiteSpace(configured)
+                && string.Equals(email.Trim(), configured, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string GetRequestIp()
+        {
+            var cfIp = Request.Headers["CF-Connecting-IP"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(cfIp))
+            {
+                return cfIp.Trim();
+            }
+
+            var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(forwardedFor))
+            {
+                return forwardedFor.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+                    ?? forwardedFor.Trim();
+            }
+
+            return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        }
+
+        private async Task<bool> IsIpBlockedAsync(string ip)
+        {
+            if (string.IsNullOrWhiteSpace(ip) || string.Equals(ip, "unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return await _context.IpsBloqueadas
+                .AsNoTracking()
+                .AnyAsync(item => item.Ip == ip && item.Activa);
+        }
+
+        private async Task RegisterFailedSuperAdminAttemptAsync(string ip, string email)
+        {
+            if (string.IsNullOrWhiteSpace(ip) || string.Equals(ip, "unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var threshold = Math.Max(3, _configuration.GetValue<int?>("Security:SuperAdminFailedIpBlockThreshold") ?? 32);
+            var item = await _context.IpsBloqueadas.FirstOrDefaultAsync(i => i.Ip == ip);
+            if (item is null)
+            {
+                item = new Domain.IpBloqueada
+                {
+                    Ip = ip,
+                    Motivo = $"Intentos fallidos contra Super Admin ({email}).",
+                    IntentosFallidos = 0,
+                    Activa = false,
+                    FechaCreacion = DateTime.UtcNow
+                };
+                _context.IpsBloqueadas.Add(item);
+            }
+
+            item.IntentosFallidos += 1;
+            item.FechaUltimoIntento = DateTime.UtcNow;
+            item.Motivo = $"Intentos fallidos contra Super Admin ({email}).";
+
+            if (item.IntentosFallidos >= threshold)
+            {
+                item.Activa = true;
+                item.FechaDesbloqueo = null;
+                item.DesbloqueadoPor = string.Empty;
+            }
+
+            await _context.SaveChangesAsync();
+
+            if (item.Activa)
+            {
+                await AuditoriaHelper.RegistrarAsync(
+                    _context,
+                    null,
+                    "Seguridad",
+                    "Bloqueo IP",
+                    $"Se bloqueó la IP {ip} por {item.IntentosFallidos} intentos fallidos contra Super Admin.",
+                    "IpBloqueada",
+                    item.Id,
+                    item.Motivo);
+            }
+        }
+
+        private async Task ClearIpFailedAttemptsAsync(string ip, string reason)
+        {
+            var item = await _context.IpsBloqueadas.FirstOrDefaultAsync(i => i.Ip == ip && !i.Activa);
+            if (item is null)
+            {
+                return;
+            }
+
+            item.IntentosFallidos = 0;
+            item.FechaDesbloqueo = DateTime.UtcNow;
+            item.DesbloqueadoPor = reason;
+            await _context.SaveChangesAsync();
+        }
     }
 }

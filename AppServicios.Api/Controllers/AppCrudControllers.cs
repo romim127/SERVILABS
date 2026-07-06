@@ -16,11 +16,16 @@ namespace AppServicios.Api.Controllers
     {
         private readonly AppServiciosDbContext _context;
         private readonly IPasswordHasher<Usuario> _passwordHasher;
+        private readonly IConfiguration _configuration;
 
-        public UsuariosController(AppServiciosDbContext context, IPasswordHasher<Usuario> passwordHasher)
+        public UsuariosController(
+            AppServiciosDbContext context,
+            IPasswordHasher<Usuario> passwordHasher,
+            IConfiguration configuration)
         {
             _context = context;
             _passwordHasher = passwordHasher;
+            _configuration = configuration;
         }
 
         [Authorize(Roles = "Administrador")]
@@ -74,6 +79,11 @@ namespace AppServicios.Api.Controllers
         [HttpPut("{id:int}")]
         public async Task<ActionResult<UsuarioDto>> Update(int id, [FromBody] UsuarioUpsertDto request)
         {
+            if (!IsCurrentUserSuperAdmin())
+            {
+                return Unauthorized("Solo el Super Admin puede modificar usuarios.");
+            }
+
             var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
             if (usuario is null)
             {
@@ -105,6 +115,11 @@ namespace AppServicios.Api.Controllers
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
+            if (!IsCurrentUserSuperAdmin())
+            {
+                return Unauthorized("Solo el Super Admin puede eliminar usuarios.");
+            }
+
             var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
             if (usuario is null)
             {
@@ -149,9 +164,9 @@ namespace AppServicios.Api.Controllers
                 ModelState.AddModelError(nameof(request.PasswordHash), "La contraseña/hash es obligatoria al crear un usuario.");
             }
 
-            if (!currentId.HasValue && !User.IsInRole("Administrador"))
+            var requestedRole = request.Rol?.Trim() ?? string.Empty;
+            if (!currentId.HasValue && !IsCurrentUserSuperAdmin())
             {
-                var requestedRole = request.Rol?.Trim() ?? string.Empty;
                 if (!string.Equals(requestedRole, "Cliente", StringComparison.OrdinalIgnoreCase)
                     && !string.Equals(requestedRole, "Profesional", StringComparison.OrdinalIgnoreCase))
                 {
@@ -196,6 +211,19 @@ namespace AppServicios.Api.Controllers
             {
                 usuario.PasswordHash = string.Empty;
             }
+        }
+
+        private bool IsCurrentUserSuperAdmin()
+        {
+            var configuredEmail = _configuration["SuperAdmin:Email"]?.Trim();
+            if (string.IsNullOrWhiteSpace(configuredEmail))
+            {
+                return false;
+            }
+
+            var currentEmail = User.FindFirstValue(System.Security.Claims.ClaimTypes.Email);
+            return User.IsInRole("Administrador")
+                && string.Equals(currentEmail, configuredEmail, StringComparison.OrdinalIgnoreCase);
         }
     }
 

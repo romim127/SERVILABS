@@ -3,6 +3,7 @@ using System;
 using AppServicios.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AppServicios.Api.Migrations
 {
     [DbContext(typeof(AppServiciosDbContext))]
-    partial class AppServiciosDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260706192143_AddIpBlocksAndSuperAdminSecurity")]
+    partial class AddIpBlocksAndSuperAdminSecurity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

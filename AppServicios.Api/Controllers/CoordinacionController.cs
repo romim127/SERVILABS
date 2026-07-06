@@ -14,10 +14,12 @@ namespace AppServicios.Api.Controllers
     public sealed class CoordinacionController : ControllerBase
     {
         private readonly AppServiciosDbContext _context;
+        private readonly IConfiguration _configuration;
 
-        public CoordinacionController(AppServiciosDbContext context)
+        public CoordinacionController(AppServiciosDbContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
         }
 
         [HttpGet("dashboard")]
@@ -82,9 +84,9 @@ namespace AppServicios.Api.Controllers
             }
 
             var adminUserId = GetAuthenticatedUserId();
-            if (!adminUserId.HasValue || !await IsActiveAdminAsync(adminUserId))
+            if (!adminUserId.HasValue || !await IsActiveSuperAdminAsync(adminUserId))
             {
-                return Unauthorized("Solo un administrador activo puede ejecutar esta acción.");
+                return Unauthorized("Solo el Super Admin activo puede ejecutar esta acción.");
             }
 
             if (request.AdminUserId > 0 && request.AdminUserId != adminUserId.Value)
@@ -147,6 +149,79 @@ namespace AppServicios.Api.Controllers
 
             var actualizado = await BuildAdminUserAsync(userId);
             return actualizado is null ? NotFound() : Ok(actualizado);
+        }
+
+        [Authorize(Roles = "Administrador")]
+        [HttpGet("admin/ips-bloqueadas")]
+        public async Task<ActionResult<IEnumerable<IpBloqueadaDto>>> GetIpsBloqueadas()
+        {
+            var adminUserId = GetAuthenticatedUserId();
+            if (!adminUserId.HasValue || !await IsActiveSuperAdminAsync(adminUserId))
+            {
+                return Unauthorized("Solo el Super Admin activo puede consultar IPs bloqueadas.");
+            }
+
+            var items = await _context.IpsBloqueadas
+                .AsNoTracking()
+                .OrderByDescending(i => i.Activa)
+                .ThenByDescending(i => i.FechaUltimoIntento ?? i.FechaCreacion)
+                .Take(100)
+                .ToListAsync();
+
+            return Ok(items.Select(ToDto));
+        }
+
+        [Authorize(Roles = "Administrador")]
+        [HttpPost("admin/ips-bloqueadas/{id:int}/desbloquear")]
+        public async Task<ActionResult<IpBloqueadaDto>> DesbloquearIp(int id, [FromBody] DesbloquearIpDto request)
+        {
+            var adminUserId = GetAuthenticatedUserId();
+            if (!adminUserId.HasValue || !await IsActiveSuperAdminAsync(adminUserId))
+            {
+                return Unauthorized("Solo el Super Admin activo puede desbloquear IPs.");
+            }
+
+            var item = await _context.IpsBloqueadas.FirstOrDefaultAsync(i => i.Id == id);
+            if (item is null)
+            {
+                return NotFound();
+            }
+
+            await UnlockIpAsync(item, $"super-admin:{adminUserId.Value}", request.Motivo);
+            return Ok(ToDto(item));
+        }
+
+        [AllowAnonymous]
+        [HttpPost("recovery/desbloquear-ip")]
+        public async Task<ActionResult<IpBloqueadaDto>> RecoveryDesbloquearIp([FromBody] DesbloquearIpDto request)
+        {
+            var recoveryKey = _configuration["Security:RecoveryKey"];
+            var provided = Request.Headers["X-Recovery-Key"].ToString();
+            if (string.IsNullOrWhiteSpace(recoveryKey)
+                || string.IsNullOrWhiteSpace(provided)
+                || !string.Equals(recoveryKey, provided, StringComparison.Ordinal))
+            {
+                await AuditoriaHelper.RegistrarAsync(
+                    _context,
+                    null,
+                    "Seguridad",
+                    "Recovery rechazado",
+                    "Intento inválido de recovery para desbloqueo de IP.",
+                    "IpBloqueada",
+                    null,
+                    request.Ip);
+                return Unauthorized("Recovery key inválida.");
+            }
+
+            var ip = request.Ip.Trim();
+            var item = await _context.IpsBloqueadas.FirstOrDefaultAsync(i => i.Ip == ip);
+            if (item is null)
+            {
+                return NotFound();
+            }
+
+            await UnlockIpAsync(item, "recovery-key", request.Motivo);
+            return Ok(ToDto(item));
         }
 
         private async Task<CoordinacionDashboardDto> BuildDashboardAsync(int days, string? city, int? rubroId, int? adminUserId = null)
@@ -429,6 +504,33 @@ namespace AppServicios.Api.Controllers
                     && u.Rol == "Administrador");
         }
 
+        private async Task<bool> IsActiveSuperAdminAsync(int? adminUserId)
+        {
+            if (!adminUserId.HasValue || adminUserId.Value <= 0)
+            {
+                return false;
+            }
+
+            var configuredEmail = _configuration["SuperAdmin:Email"]?.Trim();
+            if (string.IsNullOrWhiteSpace(configuredEmail))
+            {
+                return false;
+            }
+
+            var claimUserId = GetAuthenticatedUserId();
+            if (!claimUserId.HasValue || claimUserId.Value != adminUserId.Value || !User.IsInRole("Administrador"))
+            {
+                return false;
+            }
+
+            return await _context.Usuarios
+                .AsNoTracking()
+                .AnyAsync(u => u.Id == adminUserId.Value
+                    && u.Activo
+                    && u.Rol == "Administrador"
+                    && u.Email.ToLower() == configuredEmail.ToLower());
+        }
+
         private int? GetAuthenticatedUserId()
         {
             var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -605,5 +707,36 @@ namespace AppServicios.Api.Controllers
             var normalized = value.Replace("\"", "\"\"");
             return $"\"{normalized}\"";
         }
+
+        private async Task UnlockIpAsync(AppServicios.Api.Domain.IpBloqueada item, string actor, string? motivo)
+        {
+            item.Activa = false;
+            item.IntentosFallidos = 0;
+            item.FechaDesbloqueo = DateTime.UtcNow;
+            item.DesbloqueadoPor = actor;
+
+            await _context.SaveChangesAsync();
+
+            await AuditoriaHelper.RegistrarAsync(
+                _context,
+                null,
+                "Seguridad",
+                "Desbloqueo IP",
+                $"Se desbloqueó la IP {item.Ip}.",
+                "IpBloqueada",
+                item.Id,
+                $"{actor} | {motivo?.Trim()}");
+        }
+
+        private static IpBloqueadaDto ToDto(AppServicios.Api.Domain.IpBloqueada item) => new(
+            item.Id,
+            item.Ip,
+            item.Motivo,
+            item.IntentosFallidos,
+            item.Activa,
+            item.FechaCreacion,
+            item.FechaUltimoIntento,
+            item.FechaDesbloqueo,
+            item.DesbloqueadoPor);
     }
 }
