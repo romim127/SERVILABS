@@ -177,6 +177,19 @@ namespace AppServicios.Api.DTOs
         string? PaymentProviderId,
         string Message);
 
+    public sealed record PlanComercialDto(
+        string Codigo,
+        string Nombre,
+        string Descripcion,
+        decimal AltaMonto,
+        decimal MensualidadMonto,
+        int MesesPromocion,
+        string Moneda,
+        int CuposTotales,
+        int CuposUsados,
+        decimal ComisionPagoProtegidoPorcentaje,
+        bool Disponible);
+
     public sealed class PagoProfesionalCreateDto
     {
         [Range(1, int.MaxValue, ErrorMessage = "Debes indicar un usuario válido.")]
@@ -198,6 +211,9 @@ namespace AppServicios.Api.DTOs
 
         [StringLength(250, ErrorMessage = "El detalle no puede superar los 250 caracteres.")]
         public string Detalle { get; set; } = string.Empty;
+
+        [StringLength(40, ErrorMessage = "El código de plan no puede superar los 40 caracteres.")]
+        public string PlanCodigo { get; set; } = "FUNDADORES_PRO";
     }
 
     public sealed record NotificacionDto(

@@ -2154,11 +2154,11 @@ async function startProfessionalPayment() {
 
     const paymentPayload = {
       usuarioId: user.id,
-      monto: 2500, // Aquí podrías agregar lógica para monto variable según moneda
-      moneda: currentCurrency || 'ARS',
-      concepto: 'Alta profesional AppServicios',
+      moneda: 'ARS',
+      concepto: 'Plan Fundadores Pro',
       proveedor: 'Mercado Pago',
-      detalle: `Alta profesional en ${currentSector} · ${data.ubicacion}`
+      detalle: `Alta profesional en ${currentSector} · ${data.ubicacion}`,
+      planCodigo: 'FUNDADORES_PRO'
     };
 
     const response = await fetch('/api/PagosProfesionales', {
@@ -2212,7 +2212,8 @@ async function startProfessionalPayment() {
       if (paymentFeedback) {
         paymentFeedback.classList.remove('is-error');
         paymentFeedback.classList.add('is-success');
-        paymentFeedback.textContent = preference.message || `Orden generada por ${formatCurrency(payment.monto || 2500)}. Se abrió Mercado Pago en una pestaña nueva.`;
+        const paymentAmountLabel = `${Number(payment.monto || 2500).toLocaleString('es-AR')} ${payment.moneda || 'ARS'}`;
+        paymentFeedback.textContent = preference.message || `Orden generada por ${paymentAmountLabel}. Se abrió Mercado Pago en una pestaña nueva.`;
       }
 
       if (mercadoPagoCheckoutUrl) {

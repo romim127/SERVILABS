@@ -29,6 +29,13 @@ namespace AppServicios.Api.Controllers
             _configuration = configuration;
         }
 
+        [HttpGet("planes")]
+        public async Task<ActionResult<IEnumerable<PlanComercialDto>>> GetPlanes()
+        {
+            var founder = await BuildFounderPlanAsync();
+            return Ok(new[] { founder });
+        }
+
         [Authorize(Roles = "Administrador")]
         [HttpGet]
         public async Task<ActionResult<IEnumerable<PagoProfesionalDto>>> GetAll()
@@ -63,16 +70,31 @@ namespace AppServicios.Api.Controllers
                 return ValidationProblem(ModelState);
             }
 
+            var plan = await BuildFounderPlanAsync();
+            if (!plan.Disponible)
+            {
+                return Conflict("El Plan Fundadores ya agotó sus cupos promocionales.");
+            }
+
+            var currency = string.IsNullOrWhiteSpace(request.Moneda)
+                ? plan.Moneda
+                : request.Moneda.Trim().ToUpperInvariant();
+            if (!string.Equals(currency, "ARS", StringComparison.OrdinalIgnoreCase))
+            {
+                ModelState.AddModelError(nameof(request.Moneda), "Por ahora el alta profesional se cobra en ARS. Los equivalentes internacionales quedan como referencia hasta integrar Stripe.");
+                return ValidationProblem(ModelState);
+            }
+
             var pago = new PagoProfesional
             {
                 UsuarioId = request.UsuarioId,
-                Monto = request.Monto,
-                Moneda = request.Moneda.Trim().ToUpperInvariant(),
-                Concepto = request.Concepto.Trim(),
+                Monto = plan.AltaMonto,
+                Moneda = plan.Moneda,
+                Concepto = plan.Nombre,
                 Estado = "Pendiente",
-                Proveedor = string.IsNullOrWhiteSpace(request.Proveedor) ? "Checkout Demo AppServicios" : request.Proveedor.Trim(),
+                Proveedor = string.IsNullOrWhiteSpace(request.Proveedor) ? "Mercado Pago" : request.Proveedor.Trim(),
                 ReferenciaExterna = $"APP-PRO-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
-                Detalle = request.Detalle?.Trim() ?? string.Empty,
+                Detalle = BuildPaymentDetail(request, plan),
                 FechaCreacion = DateTime.UtcNow
             };
 
@@ -333,8 +355,46 @@ namespace AppServicios.Api.Controllers
             {
                 ModelState.AddModelError(nameof(request.UsuarioId), "El usuario debe tener rol Profesional para generar este pago.");
             }
+        }
 
-            // Permitir monto y moneda variable para multi-moneda
+        private async Task<PlanComercialDto> BuildFounderPlanAsync()
+        {
+            var cupos = Math.Max(1, _configuration.GetValue<int?>("Planes:Fundadores:MaxCupos") ?? 100);
+            var usados = await _context.PagosProfesionales
+                .AsNoTracking()
+                .CountAsync(p => p.Concepto == "Plan Fundadores Pro" && p.Estado == "Aprobado");
+            var alta = _configuration.GetValue<decimal?>("Planes:Fundadores:AltaArs") ?? 2500m;
+            var mensualidad = _configuration.GetValue<decimal?>("Planes:Fundadores:MensualidadArs") ?? 2500m;
+            var meses = Math.Max(1, _configuration.GetValue<int?>("Planes:Fundadores:MesesPromocion") ?? 3);
+            var comision = _configuration.GetValue<decimal?>("Planes:PagoProtegido:ComisionPorcentaje") ?? 2m;
+
+            return new PlanComercialDto(
+                "FUNDADORES_PRO",
+                "Plan Fundadores Pro",
+                $"Alta promocional para los primeros {cupos} profesionales. Incluye mensualidad de {mensualidad:N0} ARS por {meses} meses y comisión de pago protegido del {comision:N1}%.",
+                alta,
+                mensualidad,
+                meses,
+                "ARS",
+                cupos,
+                usados,
+                comision,
+                usados < cupos);
+        }
+
+        private static string BuildPaymentDetail(PagoProfesionalCreateDto request, PlanComercialDto plan)
+        {
+            var userDetail = string.IsNullOrWhiteSpace(request.Detalle) ? string.Empty : request.Detalle.Trim();
+            var parts = new[]
+            {
+                $"Plan={plan.Codigo}",
+                $"Alta={plan.AltaMonto:N0} {plan.Moneda}",
+                $"Mensualidad={plan.MensualidadMonto:N0} {plan.Moneda} por {plan.MesesPromocion} meses",
+                $"ComisionPagoProtegido={plan.ComisionPagoProtegidoPorcentaje:N1}%",
+                userDetail
+            };
+
+            return string.Join(" | ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
         }
 
         private HttpClient CreateMercadoPagoClient(string accessToken)
