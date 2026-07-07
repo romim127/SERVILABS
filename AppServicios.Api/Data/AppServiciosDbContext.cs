@@ -177,7 +177,8 @@ namespace AppServicios.Api.Data
                 new Rubro { Id = 12, Nombre = "Comercio Ventas y Logística", Descripcion = "Ventas, reparto, logística y atención comercial", Icono = "comercio-logistica", Activo = true },
                 new Rubro { Id = 13, Nombre = "Administración Contabilidad y Finanzas", Descripcion = "Gestión administrativa, contable y financiera", Icono = "administracion-finanzas", Activo = true },
                 new Rubro { Id = 14, Nombre = "Hostelería Turismo y Gastronomía", Descripcion = "Hotelería, turismo, cocina y atención gastronómica", Icono = "hosteleria-gastronomia", Activo = true },
-                new Rubro { Id = 15, Nombre = "Construcción y Servicios Generales", Descripcion = "Obra, mantenimiento general y servicios técnicos", Icono = "construccion-servicios", Activo = true }
+                new Rubro { Id = 15, Nombre = "Construcción y Servicios Generales", Descripcion = "Obra, mantenimiento general y servicios técnicos", Icono = "construccion-servicios", Activo = true },
+                new Rubro { Id = 16, Nombre = "Servicios Funerarios y Acompañamiento", Descripcion = "Asistencia funeraria, traslados, gestiones y acompañamiento familiar", Icono = "servicios-funerarios", Activo = true }
             );
 
             modelBuilder.Entity<Servicio>().HasData(
@@ -254,7 +255,16 @@ namespace AppServicios.Api.Data
                 new Servicio { Id = 57, RubroId = 15, Nombre = "Albañilería general", Descripcion = "Reparaciones, ampliaciones y trabajos de obra menor.", PrecioSugerido = 50000m, Unidad = "por jornada", Activo = true },
                 new Servicio { Id = 58, RubroId = 15, Nombre = "Pintura de interiores", Descripcion = "Preparación y pintura de ambientes interiores.", PrecioSugerido = 65000m, Unidad = "por ambiente", Activo = true },
                 new Servicio { Id = 59, RubroId = 15, Nombre = "Mantenimiento integral", Descripcion = "Tareas generales de mantenimiento domiciliario o comercial.", PrecioSugerido = 45000m, Unidad = "por visita", Activo = true },
-                new Servicio { Id = 60, RubroId = 15, Nombre = "Cuadrilla de obra", Descripcion = "Equipo coordinado para trabajos de construcción y mantenimiento.", PrecioSugerido = 180000m, Unidad = "por jornada", Activo = true }
+                new Servicio { Id = 60, RubroId = 15, Nombre = "Cuadrilla de obra", Descripcion = "Equipo coordinado para trabajos de construcción y mantenimiento.", PrecioSugerido = 180000m, Unidad = "por jornada", Activo = true },
+
+                new Servicio { Id = 61, RubroId = 16, Nombre = "Asistencia funeraria integral", Descripcion = "Coordinación de servicio funerario, documentación inicial y orientación familiar.", PrecioSugerido = 180000m, Unidad = "por servicio", Activo = true },
+                new Servicio { Id = 62, RubroId = 16, Nombre = "Traslado funerario", Descripcion = "Traslado respetuoso y coordinado según normativa local.", PrecioSugerido = 90000m, Unidad = "por traslado", Activo = true },
+                new Servicio { Id = 63, RubroId = 16, Nombre = "Sala velatoria", Descripcion = "Gestión de sala, horarios y acompañamiento durante la despedida.", PrecioSugerido = 150000m, Unidad = "por servicio", Activo = true },
+                new Servicio { Id = 64, RubroId = 16, Nombre = "Sepelio", Descripcion = "Coordinación de ceremonia, cementerio y servicio de inhumación.", PrecioSugerido = 220000m, Unidad = "por servicio", Activo = true },
+                new Servicio { Id = 65, RubroId = 16, Nombre = "Cremación", Descripcion = "Gestión y coordinación de cremación con acompañamiento familiar.", PrecioSugerido = 240000m, Unidad = "por servicio", Activo = true },
+                new Servicio { Id = 66, RubroId = 16, Nombre = "Trámites y documentación", Descripcion = "Orientación para certificados, permisos y gestiones administrativas.", PrecioSugerido = 60000m, Unidad = "por gestión", Activo = true },
+                new Servicio { Id = 67, RubroId = 16, Nombre = "Acompañamiento en duelo", Descripcion = "Acompañamiento humano y orientación para familiares en el proceso de duelo.", PrecioSugerido = 25000m, Unidad = "por sesión", Activo = true },
+                new Servicio { Id = 68, RubroId = 16, Nombre = "Servicio funerario de urgencia", Descripcion = "Atención prioritaria para coordinar pasos iniciales ante una pérdida reciente.", PrecioSugerido = 200000m, Unidad = "por urgencia", Activo = true }
             );
         }
     }

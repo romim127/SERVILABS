@@ -124,70 +124,62 @@ function appendAiMessage(text, from = 'bot') {
   if (!aiAssistantMessages) return;
   const div = document.createElement('div');
   div.className = 'ai-message ai-message-' + from;
-  div.innerHTML = text;
+  div.textContent = text;
   aiAssistantMessages.appendChild(div);
   aiAssistantMessages.scrollTop = aiAssistantMessages.scrollHeight;
   if (from === 'bot' && aiVoiceMode === 'voz') speakAi(text);
 }
 
+function buildLocalAiResponse(userText) {
+  const normalized = String(userText || '').toLowerCase();
+  if (/funer|sepelio|cremaci|duelo|velatorio/.test(normalized)) {
+    return 'Podemos ayudarte con servicios funerarios de forma respetuosa: traslado, sala velatoria, sepelio, cremación, gestiones y acompañamiento. Indica ciudad y urgencia para orientar la solicitud.';
+  }
+  if (/inscrib|registr|crear cuenta|alta|ofrecer|trabaj/.test(normalized)) {
+    return 'Para sumarte, toca Registrarme y crea tu perfil como Profesional o Empresa/Cuadrilla. El Plan Fundadores Pro tiene alta de 2500 ARS y mensualidad de 2500 ARS por 3 meses para los primeros 100.';
+  }
+  if (/pagar|pago|tarifa|precio|comisi/.test(normalized)) {
+    return 'El alta del Plan Fundadores Pro es de 2500 ARS, con mensualidad de 2500 ARS por 3 meses. El pago protegido por servicios tendrá comisión del 2%.';
+  }
+  return 'Estoy para ayudarte a encontrar servicios, registrarte, publicar una solicitud o armar tu perfil profesional. Cuéntame qué necesitas y te guío paso a paso.';
+}
+
+async function requestAiAssistantResponse(userText) {
+  try {
+    const response = await fetch('/api/Ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: userText, context: 'onboarding' })
+    });
+
+    if (!response.ok) {
+      throw new Error(await extractApiError(response));
+    }
+
+    const payload = await response.json();
+    return payload.message || buildLocalAiResponse(userText);
+  } catch (error) {
+    console.warn('Asistente IA en modo local.', error);
+    return buildLocalAiResponse(userText);
+  }
+}
+
 if (aiAssistantForm) {
-  aiAssistantForm.addEventListener('submit', function(e) {
+  aiAssistantForm.addEventListener('submit', async function(e) {
     e.preventDefault();
     const userText = aiAssistantInput.value.trim();
     if (!userText) return;
     appendAiMessage(userText, 'user');
     aiAssistantInput.value = '';
-    setTimeout(() => {
-      let response = '';
-      // --- Lógica avanzada de onboarding y profesiones ---
-      // Detección ampliada de inscripción, registro, crear cuenta
-      const inscripcionRegex = /inscrib|registr|crear cuenta|abrir cuenta|alta|suscrib|unirme|sumarme|quiero ser parte|quiero entrar|quiero participar|quiero ofrecer/i;
-      if (inscripcionRegex.test(userText)) {
-        // Detectar si menciona profesión/rubro
-        const matchProf = userText.match(/soy ([^.,;\n]+)/i);
-        let rubro = '';
-        if (matchProf && matchProf[1]) {
-          rubro = matchProf[1].trim();
-        } else {
-          // Buscar palabras clave de rubros comunes
-          const rubros = ['plomero', 'electricista', 'gasista', 'pintor', 'técnico', 'refrigeración', 'niñera', 'cuidador', 'jardinero', 'carpintero', 'cerrajero', 'profesional', 'servicio'];
-          for (let r of rubros) {
-            if (userText.toLowerCase().includes(r)) {
-              rubro = r;
-              break;
-            }
-          }
-        }
-        response = rubro
-          ? `¡Genial! Puedes registrarte como ${rubro}. Haz clic en “Registrarme” y completa tus datos.`
-          : '¡Genial! Haz clic en “Registrarme” y completa tus datos.';
-      }
-      // Pregunta sobre rubros, servicios, profesionales
-      else if (/servicio|rubro|profesional|plomer|electricista|gasista|técnico|refrigeración|niñera|cuidador|jardinero|carpintero|cerrajero/i.test(userText)) {
-        response = '¿Buscas un servicio específico? Usa el buscador o explora los rubros destacados. Si eres profesional, ¡puedes registrarte y ofrecer tus servicios!';
-      }
-      // Pregunta sobre pagos
-      else if (/pagar|pago|tarifa|precio/i.test(userText)) {
-        response = 'Puedes ver y comparar precios en cada perfil. El pago es seguro y multi-moneda.';
-      }
-      // Pregunta sobre ubicación/mapa
-      else if (/mapa|ubicaci[óo]n|cerca/i.test(userText)) {
-        response = '¿Quieres ver profesionales o solicitudes cerca tuyo? Haz click en el mapa o filtra por rubro.';
-      }
-      // Pregunta genérica de ayuda
-      else if (/ayuda|cómo/i.test(userText)) {
-        response = 'Estoy aquí para ayudarte. Pregúntame sobre cualquier función de la app.';
-      }
-      // Respuesta por defecto mejorada: cualquier pregunta sobre trabajo, CV, entrevistas, consejos, rubros, servicios, etc.
-      else if (/trabajo|empleo|oferta|busco|conseguir|consejo|curriculum|cv|entrevista|laboral|profesi/i.test(userText)) {
-        response = '¡Claro! Puedo orientarte sobre búsqueda de trabajo, armado de CV, entrevistas, rubros laborales, servicios ofrecidos, tarifas, oportunidades y más. Pregúntame lo que necesites sobre el mundo laboral.';
-      }
-      // Respuesta por defecto
-      else {
-        response = '¡Gracias por tu consulta! Estoy aquí para ayudarte en todo lo relacionado al trabajo, servicios, oportunidades y la app. Pregúntame lo que quieras.';
-      }
+    appendAiMessage('Estoy pensando...', 'bot');
+    const thinkingMessage = aiAssistantMessages?.lastElementChild;
+    const response = await requestAiAssistantResponse(userText);
+    if (thinkingMessage) {
+      thinkingMessage.textContent = response;
+      if (aiVoiceMode === 'voz') speakAi(response);
+    } else {
       appendAiMessage(response, 'bot');
-    }, 600);
+    }
   });
 }
 
