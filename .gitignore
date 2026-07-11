@@ -5,6 +5,8 @@
 # Node / Capacitor
 node_modules/
 .env
+__pycache__/
+reportes_antifraude/
 
 # Android build outputs
 android/.gradle/
