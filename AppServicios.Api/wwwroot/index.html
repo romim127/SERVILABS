@@ -68,7 +68,9 @@
       <div class="login-panel">
         <div class="logo">
           <img src="/logo.svg?v=11" alt="Logo SERVILABS" />
-          <h1>Bienvenido a SERVILABS</h1>
+          <span class="login-kicker">Acceso seguro</span>
+          <h1>Entrá a SERVILABS</h1>
+          <p>Coordiná servicios, pagos y mensajes desde una cuenta verificada.</p>
         </div>
         <form id="loginForm" class="step-form">
           <div class="step step-login active">
@@ -103,9 +105,14 @@
       </div>
       <div class="instructions-panel">
         <div id="wizardMessage" class="wizard-message">
-          <strong>¡Bienvenido a AppServicios!</strong>
+          <strong>Trabajo real, coordinación simple y pagos protegidos.</strong>
           <p>Para comenzar, ingresa tu email y contraseña.<br>
           Si es tu primer vez, haz clic en “Registrarme”.</p>
+          <div class="entry-proof">
+            <span>Identidad cuidada</span>
+            <span>Chat interno</span>
+            <span>Pagos seguros</span>
+          </div>
         </div>
       </div>
     </div>
@@ -161,10 +168,10 @@
             <small>Tu trabajo y tu necesidad a un click</small>
           </div>
         </div>
-        <p class="eyebrow">⚡ El mundo del trabajo, en una sola app</p>
-        <h1>La plataforma premium para conectar personas, oficios y oportunidades con una experiencia de alto nivel.</h1>
+        <p class="eyebrow">El mundo del trabajo, en una sola app</p>
+        <h1>Conectá servicios, coordiná por chat y pagá con más seguridad.</h1>
         <p class="hero-text">
-          AppServicios combina una identidad visual sólida, confianza operativa y una experiencia moderna para que clientes y profesionales sientan una app seria, clara y lista para escalar.
+          SERVILABS une clientes, profesionales y oficios con ubicación, reputación, pagos protegidos y una experiencia clara desde el primer ingreso.
         </p>
 
         <div class="hero-actions">
@@ -173,7 +180,7 @@
           <a class="btn btn-secondary" href="/swagger/index.html">Probar API</a>
         </div>
 
-        <p class="mini-note">Modo Android premium: ícono renovado, splash de marca y experiencia instalable lista para una presentación profesional.</p>
+        <p class="mini-note">MVP listo para pruebas reales: backend activo, IA integrada y camino móvil preparado para tiendas.</p>
 
         <div class="status-row">
           <div class="status-card">
@@ -298,7 +305,7 @@
                   <small>Cliente · flujo express</small>
                   <h3>Publica un trabajo y compara opciones en minutos</h3>
                 </div>
-                <span class="badge">UX clara</span>
+                <span class="badge">Rápido</span>
               </div>
 
               <div class="dashboard-kpis">
@@ -329,7 +336,7 @@
                   <small>Profesional · tablero operativo</small>
                   <h3>Organiza ingresos, radio de alcance y nuevas oportunidades</h3>
                 </div>
-                <span class="badge">Productivo</span>
+                <span class="badge">Trabajo</span>
               </div>
 
               <div class="dashboard-kpis">
@@ -360,7 +367,7 @@
                   <small>Coordinación · visión global</small>
                   <h3>Observa demanda, cuellos de botella y salud de la operación</h3>
                 </div>
-                <span class="badge">Estratégico</span>
+                <span class="badge">Control</span>
               </div>
 
               <div class="dashboard-kpis">
@@ -1130,7 +1137,7 @@
       </div>
 
       <p class="section-text">
-        Cliente y profesional pueden coordinar detalles reales del trabajo desde este canal compartido.
+        Cliente y profesional coordinan horarios, ubicación, detalles del trabajo y seguimiento del pago en un canal interno.
       </p>
 
       <div class="chat-grid">
@@ -1153,6 +1160,13 @@
         </div>
 
         <div class="chat-column glass-panel">
+          <div class="chat-compose-head">
+            <div>
+              <strong>Mensaje seguro</strong>
+              <small>Se guarda dentro de la solicitud seleccionada.</small>
+            </div>
+            <span class="pill">SERVILABS Chat</span>
+          </div>
           <label class="form-field">
             <span>Nuevo mensaje</span>
             <textarea id="chatMessageInput" rows="6" placeholder="Escribe aquí para coordinar horario, ubicación o detalles del trabajo..."></textarea>
