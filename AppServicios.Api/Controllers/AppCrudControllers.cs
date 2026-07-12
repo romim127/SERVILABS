@@ -3,6 +3,7 @@ using AppServicios.Api.Data;
 using AppServicios.Api.Domain;
 using AppServicios.Api.DTOs;
 using AppServicios.Api.Helpers;
+using AppServicios.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -826,10 +827,14 @@ namespace AppServicios.Api.Controllers
     public sealed class SolicitudesTrabajoController : ControllerBase
     {
         private readonly AppServiciosDbContext _context;
+        private readonly PushNotificationService _pushService;
 
-        public SolicitudesTrabajoController(AppServiciosDbContext context)
+        public SolicitudesTrabajoController(
+            AppServiciosDbContext context,
+            PushNotificationService pushService)
         {
             _context = context;
+            _pushService = pushService;
         }
 
         [HttpGet]
@@ -1390,6 +1395,49 @@ namespace AppServicios.Api.Controllers
 
             _context.Notificaciones.AddRange(notifications);
             await _context.SaveChangesAsync();
+
+            await SendPushNotificationsForMatchingProfessionalsAsync(solicitud, service, professionalsToNotify);
+        }
+
+        private async Task SendPushNotificationsForMatchingProfessionalsAsync(
+            SolicitudTrabajo solicitud,
+            Servicio service,
+            IReadOnlyCollection<Profesional> professionalsToNotify)
+        {
+            if (professionalsToNotify.Count == 0)
+            {
+                return;
+            }
+
+            var professionalUserIds = professionalsToNotify
+                .Select(pro => pro.UsuarioId)
+                .Distinct()
+                .ToList();
+
+            var subscriptions = await _context.PushSubscriptions
+                .AsNoTracking()
+                .Where(sub => professionalUserIds.Contains(sub.UsuarioId))
+                .ToListAsync();
+
+            if (subscriptions.Count == 0)
+            {
+                return;
+            }
+
+            var title = "ASI encontró un trabajo para vos";
+            var body = $"Nueva solicitud de {service.Nombre} en {solicitud.Ubicacion}. Revisá tu panel profesional para responder.";
+            var url = $"/#dashboard-profesional";
+
+            foreach (var subscription in subscriptions)
+            {
+                await _pushService.SendAsync(
+                    subscription,
+                    title,
+                    body,
+                    url,
+                    icon: "/ia-avatar.png",
+                    badge: "/ia-avatar.png");
+            }
         }
 
         private async Task CreateNotificationsForSolicitudStatusChangeAsync(SolicitudTrabajo solicitud, string? previousEstado, int? previousProfesionalId)

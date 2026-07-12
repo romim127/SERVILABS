@@ -16,7 +16,13 @@ namespace AppServicios.Api.Services
             _config = config;
         }
 
-        public async Task SendAsync(PushSubscription sub, string title, string body, string? url = null)
+        public async Task SendAsync(
+            PushSubscription sub,
+            string title,
+            string body,
+            string? url = null,
+            string? icon = null,
+            string? badge = null)
         {
             // Configuración VAPID
             var vapidPublicKey = _config["VAPID:PublicKey"];
@@ -29,7 +35,14 @@ namespace AppServicios.Api.Services
             }
 
             // Payload
-            var payload = JsonSerializer.Serialize(new { title, body, url });
+            var payload = JsonSerializer.Serialize(new
+            {
+                title,
+                body,
+                url,
+                icon,
+                badge
+            });
 
             // Usar WebPushNet (instalar paquete WebPush)
             var webPushClient = new WebPush.WebPushClient();

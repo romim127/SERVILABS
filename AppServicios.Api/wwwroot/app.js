@@ -1847,6 +1847,9 @@ function saveSession(session) {
   applySessionUI();
   startNotificationPolling();
   loadNotifications();
+  subscribeToPushNotifications().catch((error) => {
+    console.warn('No se pudo activar push en este dispositivo:', error);
+  });
 }
 
 function clearSession() {
@@ -1885,6 +1888,9 @@ async function restoreSavedSession() {
     localStorage.setItem(SESSION_KEY, JSON.stringify(fresh));
     applySessionUI();
     startNotificationPolling();
+    subscribeToPushNotifications().catch((error) => {
+      console.warn('No se pudo activar push en este dispositivo:', error);
+    });
     fillRequestSelectors();
     fillProfessionalSelector();
     await Promise.all([loadRequests(), loadProfessionalDashboard(), loadNotifications(), loadCoordinationDashboard()]);

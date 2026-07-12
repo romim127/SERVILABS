@@ -9,8 +9,8 @@ self.addEventListener('push', function(event) {
   const title = data.title || 'Notificación';
   const options = {
     body: data.body || '',
-    icon: '/icon-192.svg',
-    badge: '/icon-192.svg',
+    icon: data.icon || '/ia-avatar.png',
+    badge: data.badge || '/ia-avatar.png',
     data: data.url ? { url: data.url } : {}
   };
   event.waitUntil(self.registration.showNotification(title, options));
