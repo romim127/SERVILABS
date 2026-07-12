@@ -1,4 +1,4 @@
-# AppServicios · Release Android (APK / AAB)
+# SERVILABS · Release Android (APK / AAB)
 
 ## Métricas recomendadas para el emulador
 | Parámetro | Valor recomendado |
@@ -13,6 +13,7 @@
 
 ## Métricas reales del proyecto
 - `applicationId`: `com.appservicios.app`
+- Nombre visible: `SERVILABS`
 - `minSdkVersion`: `23`
 - `targetSdkVersion`: `35`
 - `compileSdkVersion`: `35`
@@ -20,7 +21,16 @@
 - `versionName`: `1.0`
 
 ## Paso 1 · Crear el keystore de release
-En Android Studio:
+Antes de empezar, verificar que existan Node.js y JDK/Android Studio:
+
+```powershell
+node --version
+npm --version
+```
+
+Si `npm` no aparece, instalar Node.js LTS y abrir una nueva terminal.
+
+Luego en Android Studio:
 1. `Build` → `Generate Signed App Bundle / APK`
 2. Elegir `Android App Bundle` o `APK`
 3. `Create new...`
@@ -62,3 +72,9 @@ npm run android:aab
 ## Recomendación
 - Probar primero con el **APK** en el emulador.
 - Cuando todo esté bien, generar el **AAB** para Play Store.
+
+## Play Console
+
+- Politica de privacidad: `https://appservicios-mn6i.onrender.com/privacidad.html`
+- Terminos: `https://appservicios-mn6i.onrender.com/terminos.html`
+- Checklist detallado: `PLAY_CONSOLE_CHECKLIST.md`

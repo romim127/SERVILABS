@@ -4,7 +4,7 @@ const publicUrl = process.env.APP_PUBLIC_URL?.trim() || 'https://appservicios-mn
 
 const config: CapacitorConfig = {
   appId: 'com.appservicios.app',
-  appName: 'AppServicios',
+  appName: 'SERVILABS',
   webDir: 'AppServicios.Api/wwwroot',
   server: {
     url: publicUrl,

@@ -1,7 +1,7 @@
 {
-  "name": "AppServicios",
-  "short_name": "AppServicios",
-  "description": "Plataforma para conectar clientes, profesionales y oportunidades laborales desde una experiencia moderna e instalable.",
+  "name": "SERVILABS",
+  "short_name": "SERVILABS",
+  "description": "Plataforma para conectar clientes, profesionales, oficios y oportunidades laborales desde una experiencia segura e instalable.",
   "lang": "es-AR",
   "start_url": "/?source=pwa",
   "scope": "/",
