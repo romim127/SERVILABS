@@ -87,6 +87,117 @@ namespace AppServicios.Api.Controllers
             return Ok(new AiChatResponseDto(text.Trim(), true, "openai"));
         }
 
+        [HttpPost("cosa-del-cosito")]
+        [RequestSizeLimit(5_000_000)]
+        public async Task<ActionResult<AiCositoResponseDto>> CosaDelCosito([FromForm] AiCositoRequestDto request)
+        {
+            var description = request.Description?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(description) && request.Photo is null)
+            {
+                return BadRequest("Escribe qué ves o adjunta una foto para que ASI pueda orientarte.");
+            }
+
+            if (request.Photo is { Length: > 0 })
+            {
+                var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp" };
+                if (!allowedTypes.Contains(request.Photo.ContentType, StringComparer.OrdinalIgnoreCase))
+                {
+                    return BadRequest("La foto debe ser JPG, PNG o WEBP.");
+                }
+
+                if (request.Photo.Length > 4_000_000)
+                {
+                    return BadRequest("La foto no puede superar 4 MB.");
+                }
+            }
+
+            var apiKey = _configuration["OpenAI:ApiKey"] ?? _configuration["OPENAI_API_KEY"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                return Ok(BuildLocalCositoResponse(description, "local"));
+            }
+
+            try
+            {
+                var model = _configuration["OpenAI:VisionModel"] ?? _configuration["OpenAI:Model"] ?? "gpt-4.1-mini";
+                var contentParts = new List<object>
+                {
+                    new
+                    {
+                        type = "input_text",
+                        text = BuildCositoPrompt(description)
+                    }
+                };
+
+                if (request.Photo is { Length: > 0 })
+                {
+                    await using var stream = request.Photo.OpenReadStream();
+                    using var memory = new MemoryStream();
+                    await stream.CopyToAsync(memory);
+                    var base64 = Convert.ToBase64String(memory.ToArray());
+                    contentParts.Add(new
+                    {
+                        type = "input_image",
+                        image_url = $"data:{request.Photo.ContentType};base64,{base64}"
+                    });
+                }
+
+                var client = _httpClientFactory.CreateClient();
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+                var payload = new
+                {
+                    model,
+                    input = new object[]
+                    {
+                        new
+                        {
+                            role = "system",
+                            content = new[]
+                            {
+                                new
+                                {
+                                    type = "input_text",
+                                    text = """
+                                        Eres ASI en el modo "La cosa del cosito" de SERVILABS.
+                                        Ayudas a una persona cliente a describir mejor un problema domestico o laboral a partir de texto y/o foto.
+                                        No diagnostiques con certeza, no reemplaces al profesional y no indiques reparaciones peligrosas paso a paso.
+                                        Devuelve solo JSON valido con las claves: orientation, suggestedTrade, suggestedService, suggestedPost, safetyNote.
+                                        El suggestedPost debe ser un anuncio breve, claro y editable para publicar una solicitud.
+                                        Si hay riesgo de gas, electricidad, fuego, humo, agua cerca de electricidad o estructura insegura, incluye una advertencia simple de seguridad.
+                                        """
+                                }
+                            }
+                        },
+                        new
+                        {
+                            role = "user",
+                            content = contentParts
+                        }
+                    },
+                    max_output_tokens = 450
+                };
+
+                using var response = await client.PostAsync(
+                    "https://api.openai.com/v1/responses",
+                    new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"));
+
+                var content = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode)
+                {
+                    return Ok(BuildLocalCositoResponse(description, $"openai-{(int)response.StatusCode}"));
+                }
+
+                var text = ExtractResponseText(content);
+                var parsed = TryParseCositoResponse(text);
+                return Ok(parsed with { AiEnabled = true, Source = "openai" });
+            }
+            catch
+            {
+                return Ok(BuildLocalCositoResponse(description, "local-error"));
+            }
+        }
+
         private static string ExtractResponseText(string json)
         {
             using var document = JsonDocument.Parse(json);
@@ -141,6 +252,100 @@ namespace AppServicios.Api.Controllers
             }
 
             return "Estoy para ayudarte a encontrar servicios, registrarte, publicar una solicitud o armar tu perfil profesional. Cuéntame qué necesitas y te guío paso a paso.";
+        }
+
+        private static string BuildCositoPrompt(string description)
+        {
+            var safeDescription = string.IsNullOrWhiteSpace(description)
+                ? "La persona adjunto una foto y no sabe como describir el problema."
+                : description;
+
+            return $"""
+                La persona cliente dice: "{safeDescription}".
+                Ayudala a pasar de "la cosa del cosito" a una solicitud clara para SERVILABS.
+                Si no hay suficiente informacion, aclara que es una orientacion probable.
+                No afirmes marcas, piezas exactas ni materiales si no son evidentes.
+                """;
+        }
+
+        private static AiCositoResponseDto TryParseCositoResponse(string text)
+        {
+            try
+            {
+                var start = text.IndexOf('{');
+                var end = text.LastIndexOf('}');
+                var json = start >= 0 && end > start ? text[start..(end + 1)] : text;
+                using var document = JsonDocument.Parse(json);
+                var root = document.RootElement;
+
+                return new AiCositoResponseDto(
+                    ReadJsonString(root, "orientation", "ASI puede orientarte, pero el profesional confirma el diagnostico en persona."),
+                    ReadJsonString(root, "suggestedTrade", "Profesional del rubro adecuado"),
+                    ReadJsonString(root, "suggestedService", "Revision tecnica"),
+                    ReadJsonString(root, "suggestedPost", "Necesito una revision tecnica. Adjunto foto como referencia para que el profesional pueda orientarse antes de venir."),
+                    ReadJsonString(root, "safetyNote", "La sugerencia de ASI es orientativa y no reemplaza la evaluacion profesional."),
+                    true,
+                    "openai");
+            }
+            catch
+            {
+                return new AiCositoResponseDto(
+                    "ASI puede orientarte, pero el profesional confirma el diagnostico en persona.",
+                    "Profesional del rubro adecuado",
+                    "Revision tecnica",
+                    string.IsNullOrWhiteSpace(text) ? "Necesito una revision tecnica. Adjunto foto como referencia para orientar la visita." : text,
+                    "La sugerencia de ASI es orientativa y no reemplaza la evaluacion profesional.",
+                    true,
+                    "openai-text");
+            }
+        }
+
+        private static string ReadJsonString(JsonElement root, string propertyName, string fallback)
+        {
+            return root.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+                ? property.GetString() ?? fallback
+                : fallback;
+        }
+
+        private static AiCositoResponseDto BuildLocalCositoResponse(string description, string source)
+        {
+            var normalized = description.ToLowerInvariant();
+            var suggestedTrade = "Profesional del rubro adecuado";
+            var suggestedService = "Revision tecnica";
+            var safetyNote = "La sugerencia de ASI es orientativa y no reemplaza la evaluacion profesional.";
+
+            if (normalized.Contains("gas") || normalized.Contains("calefon") || normalized.Contains("calefón") || normalized.Contains("olor"))
+            {
+                suggestedTrade = "Gasista matriculado o plomero";
+                suggestedService = "Revision de calefon, conexion o posible perdida";
+                safetyNote = "Si hay olor a gas, ventila el ambiente, evita encender luces o artefactos y contacta a un gasista matriculado o emergencias.";
+            }
+            else if (normalized.Contains("cable") || normalized.Contains("enchufe") || normalized.Contains("luz") || normalized.Contains("chispa") || normalized.Contains("electric"))
+            {
+                suggestedTrade = "Electricista";
+                suggestedService = "Revision electrica";
+                safetyNote = "Si hay chispas, olor a quemado o cables expuestos, evita manipular la zona y corta la energia si puedes hacerlo con seguridad.";
+            }
+            else if (normalized.Contains("agua") || normalized.Contains("caño") || normalized.Contains("cano") || normalized.Contains("perdida") || normalized.Contains("pérdida"))
+            {
+                suggestedTrade = "Plomero";
+                suggestedService = "Revision de perdida o cañeria";
+                safetyNote = "Si la perdida es grande, intenta cerrar la llave de paso y aleja artefactos electricos.";
+            }
+
+            var post = $"Necesito {suggestedTrade.ToLowerInvariant()} para {suggestedService.ToLowerInvariant()}. ";
+            post += string.IsNullOrWhiteSpace(description)
+                ? "Adjunto foto como referencia para que el profesional pueda orientarse antes de venir."
+                : $"Lo que veo es: {description.Trim()}. Adjunto foto como referencia si corresponde.";
+
+            return new AiCositoResponseDto(
+                "ASI te ayuda a ponerle nombre al problema para publicar una solicitud mas clara. El diagnostico final lo confirma el profesional.",
+                suggestedTrade,
+                suggestedService,
+                post,
+                safetyNote,
+                false,
+                source);
         }
     }
 }

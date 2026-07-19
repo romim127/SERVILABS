@@ -16,4 +16,21 @@ namespace AppServicios.Api.DTOs
         string Message,
         bool AiEnabled,
         string Source);
+
+    public sealed class AiCositoRequestDto
+    {
+        [StringLength(1200)]
+        public string Description { get; set; } = string.Empty;
+
+        public IFormFile? Photo { get; set; }
+    }
+
+    public sealed record AiCositoResponseDto(
+        string Orientation,
+        string SuggestedTrade,
+        string SuggestedService,
+        string SuggestedPost,
+        string SafetyNote,
+        bool AiEnabled,
+        string Source);
 }

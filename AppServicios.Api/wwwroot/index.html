@@ -52,6 +52,22 @@
             </div>
           </div>
         </div>
+        <section class="cosito-card" id="cositoCard" aria-label="La cosa del cosito">
+          <button type="button" class="cosito-toggle" id="cositoToggle">
+            <span>La cosa del cosito</span>
+            <small>Subí foto o contame qué ves</small>
+          </button>
+          <div class="cosito-body" id="cositoBody" hidden>
+            <p>ASI te ayuda a describir mejor el problema. El profesional confirma el diagnóstico.</p>
+            <textarea id="cositoDescription" rows="3" placeholder="Ej: se me rompió el cosito del calefón, veo un caño con pérdida..."></textarea>
+            <input id="cositoPhoto" type="file" accept="image/png,image/jpeg,image/webp" />
+            <div class="cosito-actions">
+              <button type="button" id="cositoAnalyzeButton">Ayudame a explicarlo</button>
+              <button type="button" id="cositoApplyButton" hidden>Usar en mi solicitud</button>
+            </div>
+            <div class="cosito-result" id="cositoResult" aria-live="polite"></div>
+          </div>
+        </section>
         <form id="aiAssistantForm" class="ai-assistant-form">
           <input id="aiAssistantInput" type="text" placeholder="Pregúntame lo que quieras..." autocomplete="off" />
           <button type="submit">Enviar</button>

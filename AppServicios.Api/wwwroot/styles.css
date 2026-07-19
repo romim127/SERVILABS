@@ -428,7 +428,7 @@ body::selection {
   top: 120px;
   right: 0;
   width: 370px;
-  max-height: 520px;
+  max-height: min(720px, calc(100vh - 150px));
   background: var(--panel-strong, rgba(9,16,32,0.95));
   border: 2px solid var(--accent, #6ef2ff);
   border-radius: 18px;
@@ -491,6 +491,116 @@ body::selection {
   gap: 10px;
   min-height: 180px;
   max-height: 320px;
+}
+
+.cosito-card {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border, rgba(126,201,255,0.22));
+  background: rgba(110,242,255,0.06);
+  overflow-y: auto;
+  max-height: 330px;
+}
+
+.cosito-toggle {
+  width: 100%;
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid rgba(110,242,255,0.24);
+  border-radius: 12px;
+  background: rgba(10,18,36,0.82);
+  color: var(--text, #eef7ff);
+  cursor: pointer;
+}
+
+.cosito-toggle span {
+  font-weight: 800;
+  color: var(--accent, #6ef2ff);
+}
+
+.cosito-toggle small,
+.cosito-body p {
+  color: var(--muted, #a9bad3);
+}
+
+.cosito-body {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.cosito-body p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.cosito-body textarea,
+.cosito-body input[type="file"] {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border, rgba(126,201,255,0.22));
+  background: var(--panel, rgba(10,18,36,0.72));
+  color: var(--text, #eef7ff);
+  font-size: 0.86rem;
+}
+
+.cosito-body textarea {
+  min-height: 78px;
+  padding: 9px 11px;
+  resize: vertical;
+}
+
+.cosito-body input[type="file"] {
+  padding: 8px;
+}
+
+.cosito-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cosito-actions button {
+  flex: 1 1 130px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent, #6ef2ff);
+  color: var(--button-text, #03111c);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.cosito-actions button[hidden] {
+  display: none;
+}
+
+.cosito-actions button:disabled {
+  opacity: 0.68;
+  cursor: wait;
+}
+
+.cosito-result {
+  display: grid;
+  gap: 6px;
+  font-size: 0.84rem;
+  line-height: 1.38;
+  color: var(--text, #eef7ff);
+}
+
+.cosito-result strong {
+  color: var(--accent, #6ef2ff);
+}
+
+.cosito-result span,
+.cosito-result small {
+  display: block;
+}
+
+.cosito-safety {
+  color: #ffd89e;
 }
 
 .ai-message {

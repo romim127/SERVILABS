@@ -110,6 +110,14 @@ const aiAssistantClose = document.getElementById('aiAssistantClose');
 const aiAssistantMessages = document.getElementById('aiAssistantMessages');
 const aiAssistantForm = document.getElementById('aiAssistantForm');
 const aiAssistantInput = document.getElementById('aiAssistantInput');
+const cositoToggle = document.getElementById('cositoToggle');
+const cositoBody = document.getElementById('cositoBody');
+const cositoDescription = document.getElementById('cositoDescription');
+const cositoPhoto = document.getElementById('cositoPhoto');
+const cositoAnalyzeButton = document.getElementById('cositoAnalyzeButton');
+const cositoApplyButton = document.getElementById('cositoApplyButton');
+const cositoResult = document.getElementById('cositoResult');
+let latestCositoSuggestion = null;
 
 function showAiAssistantPanel() {
   if (aiAssistantPanel) aiAssistantPanel.style.display = 'block';
@@ -163,6 +171,116 @@ async function requestAiAssistantResponse(userText) {
     return buildLocalAiResponse(userText);
   }
 }
+
+function normalizeForMatch(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function renderCositoResult(payload) {
+  if (!cositoResult) return;
+  latestCositoSuggestion = payload;
+  cositoResult.innerHTML = `
+    <strong>${escapeHtml(payload.suggestedService || 'Revisión técnica')}</strong>
+    <span>${escapeHtml(payload.orientation || 'ASI puede orientarte, pero el profesional confirma el diagnóstico.')}</span>
+    <small><b>Rubro sugerido:</b> ${escapeHtml(payload.suggestedTrade || 'Profesional del rubro adecuado')}</small>
+    <small><b>Anuncio:</b> ${escapeHtml(payload.suggestedPost || '')}</small>
+    <small class="cosito-safety">${escapeHtml(payload.safetyNote || 'La sugerencia es orientativa y no reemplaza la evaluación profesional.')}</small>
+  `;
+  if (cositoApplyButton) cositoApplyButton.hidden = !payload.suggestedPost;
+}
+
+function selectServiceByCositoSuggestion(payload) {
+  const target = normalizeForMatch(`${payload.suggestedTrade || ''} ${payload.suggestedService || ''} ${payload.suggestedPost || ''}`);
+  const keywords = [
+    ['gasista', ['gas', 'calefon', 'caldera']],
+    ['plomeria', ['plom', 'agua', 'cano', 'caneria', 'perdida']],
+    ['electricidad', ['electric', 'cable', 'enchufe', 'luz', 'chispa']],
+    ['limpieza', ['limpieza', 'desinfeccion']],
+    ['enfermeria', ['enfermer', 'cuidado', 'salud']],
+    ['cerrajeria', ['cerradura', 'llave', 'puerta']]
+  ];
+
+  const matchText = keywords.find(([, words]) => words.some((word) => target.includes(word)))?.[0] || '';
+  [servicePicker, requestServiceSelect].forEach((select) => {
+    if (!select) return;
+    const options = Array.from(select.options || []);
+    const selected = options.find((option) => {
+      const text = normalizeForMatch(option.textContent);
+      return (matchText && text.includes(matchText)) || text.includes(target.slice(0, 18));
+    });
+    if (selected) {
+      select.value = selected.value;
+      select.dispatchEvent(new Event('change'));
+    }
+  });
+}
+
+async function analyzeCosito() {
+  const description = cositoDescription?.value.trim() || '';
+  const photo = cositoPhoto?.files?.[0] || null;
+  if (!description && !photo) {
+    if (cositoResult) cositoResult.textContent = 'Escribí qué ves o adjuntá una foto para que ASI pueda orientarte.';
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('description', description);
+  if (photo) formData.append('photo', photo);
+
+  if (cositoAnalyzeButton) {
+    cositoAnalyzeButton.disabled = true;
+    cositoAnalyzeButton.textContent = 'Analizando...';
+  }
+  if (cositoResult) cositoResult.textContent = 'ASI está mirando la cosa del cosito...';
+  if (cositoApplyButton) cositoApplyButton.hidden = true;
+
+  try {
+    const response = await fetch('/api/Ai/cosa-del-cosito', {
+      method: 'POST',
+      body: formData
+    });
+    if (!response.ok) throw new Error(await extractApiError(response));
+    const payload = await response.json();
+    renderCositoResult(payload);
+    appendAiMessage(`La cosa del cosito: ${payload.suggestedPost}`, 'bot');
+  } catch (error) {
+    console.warn('No se pudo analizar La cosa del cosito.', error);
+    if (cositoResult) cositoResult.textContent = error.message || 'No se pudo analizar. Probá con una descripción breve.';
+  } finally {
+    if (cositoAnalyzeButton) {
+      cositoAnalyzeButton.disabled = false;
+      cositoAnalyzeButton.textContent = 'Ayudame a explicarlo';
+    }
+  }
+}
+
+function applyCositoSuggestion() {
+  if (!latestCositoSuggestion?.suggestedPost) return;
+  if (messageInput) {
+    messageInput.value = latestCositoSuggestion.suggestedPost;
+    messageInput.dispatchEvent(new Event('input'));
+  }
+  if (requestDescriptionInput) {
+    requestDescriptionInput.value = latestCositoSuggestion.suggestedPost;
+  }
+  selectServiceByCositoSuggestion(latestCositoSuggestion);
+  updatePreview();
+  if (requestFeedback) {
+    requestFeedback.textContent = 'ASI cargó una descripción orientativa. Revisala antes de publicar.';
+  }
+  document.getElementById('dashboard-cliente')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+if (cositoToggle && cositoBody) {
+  cositoToggle.addEventListener('click', () => {
+    cositoBody.hidden = !cositoBody.hidden;
+  });
+}
+if (cositoAnalyzeButton) cositoAnalyzeButton.addEventListener('click', analyzeCosito);
+if (cositoApplyButton) cositoApplyButton.addEventListener('click', applyCositoSuggestion);
 
 if (aiAssistantForm) {
   aiAssistantForm.addEventListener('submit', async function(e) {
