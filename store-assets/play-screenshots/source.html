@@ -206,6 +206,117 @@
       flex-direction: column;
       gap: 22px;
     }
+    .phone-shell {
+      width: 100%;
+      border-radius: 42px;
+      padding: 28px;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.2);
+      box-shadow: 0 30px 90px rgba(0,0,0,.32);
+    }
+    .asi-panel {
+      border-radius: 32px;
+      overflow: hidden;
+      background: #08162b;
+      border: 2px solid rgba(19,205,184,.55);
+      color: #f8fbff;
+    }
+    .asi-head {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 28px;
+      background: #0d2442;
+      border-bottom: 1px solid rgba(255,255,255,.14);
+    }
+    .asi-head img {
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+    }
+    .asi-head strong {
+      display: block;
+      font-size: 34px;
+      line-height: 1.05;
+    }
+    .asi-head span {
+      display: block;
+      margin-top: 8px;
+      color: #b9d4ff;
+      font-size: 22px;
+    }
+    .cosito-demo {
+      padding: 28px;
+      display: grid;
+      gap: 20px;
+    }
+    .cosito-title {
+      padding: 22px;
+      border-radius: 24px;
+      background: rgba(19,205,184,.14);
+      border: 1px solid rgba(19,205,184,.46);
+    }
+    .cosito-title strong {
+      display: block;
+      color: #6ef2ff;
+      font-size: 34px;
+    }
+    .cosito-title span {
+      display: block;
+      margin-top: 10px;
+      color: #dbeafe;
+      font-size: 23px;
+      line-height: 1.32;
+    }
+    .photo-box {
+      height: 260px;
+      border-radius: 26px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 26px;
+      color: #0b1b32;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.9), rgba(223,241,255,.94)),
+        repeating-linear-gradient(45deg, rgba(0,87,215,.12), rgba(0,87,215,.12) 2px, transparent 2px, transparent 34px);
+    }
+    .photo-box strong {
+      display: block;
+      font-size: 31px;
+    }
+    .photo-box span {
+      display: block;
+      margin-top: 10px;
+      color: #44607d;
+      font-size: 22px;
+      line-height: 1.3;
+    }
+    .cosito-result-demo {
+      display: grid;
+      gap: 14px;
+      padding: 24px;
+      border-radius: 26px;
+      background: rgba(255,255,255,.95);
+      color: #0b1b32;
+    }
+    .cosito-result-demo strong {
+      font-size: 31px;
+      line-height: 1.12;
+    }
+    .cosito-result-demo span,
+    .cosito-result-demo small {
+      color: #385878;
+      font-size: 22px;
+      line-height: 1.35;
+    }
+    .cosito-warning {
+      padding: 18px 20px;
+      border-radius: 20px;
+      background: #fff2d8;
+      color: #5a3b00;
+      font-size: 21px;
+      line-height: 1.32;
+    }
     .bubble {
       max-width: 76%;
       padding: 24px 26px;
@@ -353,6 +464,34 @@
           <div class="card"><strong>Mercado Pago</strong><span>Alta, mensualidad y pagos preparados.</span></div>
           <div class="card"><strong>Open Gateway</strong><span>Sandbox para verificación móvil antifraude.</span></div>
         </div>
+      `,
+      '6': headerMarkup + `
+        <h1>Cuando no sabés cómo explicarlo.</h1>
+        <p class="lead">ASI te ayuda a pasar de “el cosito del calefón” a una solicitud clara para el profesional.</p>
+        <div class="phone-shell">
+          <div class="asi-panel">
+            <div class="asi-head">
+              <img src="${asi}">
+              <div><strong>ASI</strong><span>Asistente de SERVILABS</span></div>
+            </div>
+            <div class="cosito-demo">
+              <div class="cosito-title">
+                <strong>La cosa del cosito</strong>
+                <span>Subí una foto o contá qué ves. ASI te ayuda a describir mejor el problema.</span>
+              </div>
+              <div class="photo-box">
+                <div><strong>Foto de referencia</strong><span>“Se me rompió el cosito del calefón y veo una pérdida.”</span></div>
+              </div>
+              <div class="cosito-result-demo">
+                <strong>Anuncio sugerido</strong>
+                <span>Necesito gasista matriculado o plomero para revisar una posible pérdida o conexión del calefón. Adjunto foto como referencia.</span>
+                <small>Rubro sugerido: Gasista / Plomería</small>
+              </div>
+              <div class="cosito-warning">ASI orienta la descripción. El diagnóstico final lo confirma el profesional.</div>
+            </div>
+          </div>
+        </div>
+        <div class="cta">Usar en mi solicitud</div>
       `
     };
     root.innerHTML = screens[currentScreen] || screens['1'];
