@@ -1273,13 +1273,7 @@ namespace AppServicios.Api.Controllers
 
         private static decimal CalculateProfessionalPayout(SolicitudTrabajo solicitud)
         {
-            if (!string.Equals(solicitud.Estado, "Completado", StringComparison.OrdinalIgnoreCase))
-            {
-                return 0m;
-            }
-
-            return solicitud.PresupuestoFinal
-                ?? (solicitud.PresupuestoEstimado + (solicitud.CostoTraslado ?? 0m) + (solicitud.Incentivo ?? 0m));
+            return 0m;
         }
 
         private static decimal? ResolveDistanceKm(SolicitudTrabajoUpsertDto request, SolicitudTrabajo? current, Profesional profesional)

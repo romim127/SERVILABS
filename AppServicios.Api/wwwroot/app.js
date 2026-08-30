@@ -147,7 +147,7 @@ function buildLocalAiResponse(userText) {
     return 'Para sumarte, toca Registrarme y crea tu perfil como Profesional o Empresa/Cuadrilla. El Plan Fundadores Pro tiene alta de 2500 ARS y mensualidad de 2500 ARS por 3 meses para los primeros 100.';
   }
   if (/pagar|pago|tarifa|precio|comisi/.test(normalized)) {
-    return 'El alta del Plan Fundadores Pro es de 2500 ARS, con mensualidad de 2500 ARS por 3 meses. El pago protegido por servicios tendrá comisión del 2%.';
+    return 'El alta del Plan Fundadores Pro es de 2500 ARS, con mensualidad de 2500 ARS por 3 meses. El pago protegido por servicios tendrá comisión 0% por lanzamiento.';
   }
   return 'Estoy para ayudarte a encontrar servicios, registrarte, publicar una solicitud o armar tu perfil profesional. Cuéntame qué necesitas y te guío paso a paso.';
 }

@@ -18,6 +18,10 @@ namespace AppServicios.Api.Data
         public DbSet<SolicitudTrabajo> SolicitudesTrabajo { get; set; }
         public DbSet<MensajeSolicitud> MensajesSolicitud { get; set; }
         public DbSet<PagoProfesional> PagosProfesionales { get; set; }
+        public DbSet<Billetera> Billeteras { get; set; }
+        public DbSet<MovimientoBilletera> MovimientosBilletera { get; set; }
+        public DbSet<PagoServicioProtegido> PagosServicioProtegidos { get; set; }
+        public DbSet<DisputaPago> DisputasPago { get; set; }
         public DbSet<Notificacion> Notificaciones { get; set; }
         public DbSet<PushSubscription> PushSubscriptions { get; set; }
         public DbSet<AuditoriaEvento> AuditoriaEventos { get; set; }
@@ -111,6 +115,54 @@ namespace AppServicios.Api.Data
                 .HasForeignKey(p => p.UsuarioId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<Billetera>()
+                .HasOne(b => b.Usuario)
+                .WithMany()
+                .HasForeignKey(b => b.UsuarioId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<MovimientoBilletera>()
+                .HasOne(m => m.Billetera)
+                .WithMany(b => b.Movimientos)
+                .HasForeignKey(m => m.BilleteraId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<MovimientoBilletera>()
+                .HasOne(m => m.PagoServicioProtegido)
+                .WithMany(p => p.Movimientos)
+                .HasForeignKey(m => m.PagoServicioProtegidoId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<PagoServicioProtegido>()
+                .HasOne(p => p.SolicitudTrabajo)
+                .WithMany()
+                .HasForeignKey(p => p.SolicitudTrabajoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PagoServicioProtegido>()
+                .HasOne(p => p.Cliente)
+                .WithMany()
+                .HasForeignKey(p => p.ClienteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PagoServicioProtegido>()
+                .HasOne(p => p.Profesional)
+                .WithMany()
+                .HasForeignKey(p => p.ProfesionalId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<DisputaPago>()
+                .HasOne(d => d.PagoServicioProtegido)
+                .WithMany(p => p.Disputas)
+                .HasForeignKey(d => d.PagoServicioProtegidoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<DisputaPago>()
+                .HasOne(d => d.Usuario)
+                .WithMany()
+                .HasForeignKey(d => d.UsuarioId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             // Notificacion - Usuario
             modelBuilder.Entity<Notificacion>()
                 .HasOne(n => n.Usuario)
@@ -147,6 +199,27 @@ namespace AppServicios.Api.Data
             modelBuilder.Entity<PagoProfesional>()
                 .HasIndex(p => p.ReferenciaExterna)
                 .IsUnique();
+
+            modelBuilder.Entity<Billetera>()
+                .HasIndex(b => b.UsuarioId)
+                .IsUnique();
+
+            modelBuilder.Entity<MovimientoBilletera>()
+                .HasIndex(m => new { m.BilleteraId, m.FechaCreacion });
+
+            modelBuilder.Entity<PagoServicioProtegido>()
+                .HasIndex(p => p.SolicitudTrabajoId)
+                .IsUnique();
+
+            modelBuilder.Entity<PagoServicioProtegido>()
+                .HasIndex(p => p.ReferenciaExterna)
+                .IsUnique();
+
+            modelBuilder.Entity<PagoServicioProtegido>()
+                .HasIndex(p => p.Estado);
+
+            modelBuilder.Entity<DisputaPago>()
+                .HasIndex(d => new { d.PagoServicioProtegidoId, d.Estado });
 
             modelBuilder.Entity<Notificacion>()
                 .HasIndex(n => n.UsuarioId);

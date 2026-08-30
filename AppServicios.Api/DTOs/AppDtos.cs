@@ -216,6 +216,107 @@ namespace AppServicios.Api.DTOs
         public string PlanCodigo { get; set; } = "FUNDADORES_PRO";
     }
 
+    public sealed record BilleteraDto(
+        int Id,
+        int UsuarioId,
+        string UsuarioNombre,
+        decimal SaldoDisponible,
+        decimal SaldoRetenido,
+        string Moneda,
+        DateTime FechaActualizacion,
+        List<MovimientoBilleteraDto> Movimientos);
+
+    public sealed record MovimientoBilleteraDto(
+        int Id,
+        int? PagoServicioProtegidoId,
+        string Tipo,
+        string Estado,
+        decimal Monto,
+        string Moneda,
+        string Descripcion,
+        string Referencia,
+        DateTime FechaCreacion);
+
+    public sealed record PagoServicioProtegidoDto(
+        int Id,
+        int SolicitudTrabajoId,
+        int ClienteId,
+        string ClienteNombre,
+        int ProfesionalId,
+        string ProfesionalNombre,
+        decimal MontoBruto,
+        decimal ComisionPorcentaje,
+        decimal ComisionMonto,
+        decimal MontoProfesional,
+        string Moneda,
+        string Estado,
+        string Proveedor,
+        string ReferenciaExterna,
+        string ReferenciaProveedor,
+        string Detalle,
+        DateTime FechaCreacion,
+        DateTime? FechaPago,
+        DateTime? FechaTrabajoCompletado,
+        DateTime? FechaVencimientoLiberacion,
+        DateTime? FechaLiberacion,
+        List<DisputaPagoDto> Disputas);
+
+    public sealed record DisputaPagoDto(
+        int Id,
+        int UsuarioId,
+        string UsuarioNombre,
+        string Motivo,
+        string Estado,
+        string Resolucion,
+        DateTime FechaCreacion,
+        DateTime? FechaResolucion);
+
+    public sealed class PagoServicioProtegidoCreateDto
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "Debes indicar una solicitud válida.")]
+        public int SolicitudTrabajoId { get; set; }
+
+        [Range(1, int.MaxValue, ErrorMessage = "Debes indicar el usuario que opera el pago.")]
+        public int UsuarioOperadorId { get; set; }
+
+        [Range(typeof(decimal), "0.01", "99999999", ErrorMessage = "El monto debe ser mayor a 0.")]
+        public decimal? Monto { get; set; }
+
+        [StringLength(10, MinimumLength = 3, ErrorMessage = "La moneda debe tener entre 3 y 10 caracteres.")]
+        public string Moneda { get; set; } = "ARS";
+    }
+
+    public sealed class PagoProtegidoAccionDto
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "Debes indicar el usuario que opera el pago.")]
+        public int UsuarioOperadorId { get; set; }
+
+        [StringLength(500, ErrorMessage = "El detalle no puede superar los 500 caracteres.")]
+        public string Detalle { get; set; } = string.Empty;
+    }
+
+    public sealed class DisputaPagoCreateDto
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "Debes indicar el usuario que abre la disputa.")]
+        public int UsuarioOperadorId { get; set; }
+
+        [Required(ErrorMessage = "El motivo es obligatorio.")]
+        [StringLength(800, MinimumLength = 10, ErrorMessage = "El motivo debe tener entre 10 y 800 caracteres.")]
+        public string Motivo { get; set; } = string.Empty;
+    }
+
+    public sealed class DisputaPagoResolucionDto
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "Debes indicar el administrador que resuelve la disputa.")]
+        public int AdminUserId { get; set; }
+
+        public bool LiberarAlProfesional { get; set; }
+
+        [Required(ErrorMessage = "La resolución es obligatoria.")]
+        [StringLength(800, MinimumLength = 10, ErrorMessage = "La resolución debe tener entre 10 y 800 caracteres.")]
+        public string Resolucion { get; set; } = string.Empty;
+    }
+
     public sealed record NotificacionDto(
         int Id,
         int UsuarioId,
