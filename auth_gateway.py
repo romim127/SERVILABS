@@ -24,6 +24,7 @@ class OpenGatewayAuthError(RuntimeError):
 
 class GestorTokenOpenGateway:
     def __init__(self) -> None:
+        self.token_url = os.getenv("OPEN_GATEWAY_TOKEN_URL") or os.getenv("OPEN_GATEWAY_AUTH_URL")
         self.auth_url = os.getenv("OPEN_GATEWAY_AUTH_URL")
         self.client_id = os.getenv("OPEN_GATEWAY_CLIENT_ID")
         self.client_secret = os.getenv("OPEN_GATEWAY_CLIENT_SECRET")
@@ -74,7 +75,7 @@ class GestorTokenOpenGateway:
 
         try:
             respuesta = requests.post(
-                self.auth_url,
+                self.token_url,
                 data=payload,
                 headers=headers,
                 timeout=self.timeout_seconds,
@@ -116,11 +117,34 @@ class GestorTokenOpenGateway:
         self.token_actual = None
         self.timestamp_expiracion = 0.0
 
+    def obtener_url_autorizacion_backend(self) -> str:
+        """Devuelve la URL CIBA/bc-authorize cuando el flujo requiera consentimiento."""
+
+        if not self.auth_url:
+            raise OpenGatewayAuthError("Falta OPEN_GATEWAY_AUTH_URL para iniciar CIBA.")
+
+        return self.auth_url
+
+    def obtener_configuracion_publica(self) -> dict[str, str | None]:
+        """Devuelve endpoints configurados sin exponer client_secret ni tokens."""
+
+        return {
+            "token_url": self.token_url,
+            "auth_url": self.auth_url,
+            "scope": self.scope,
+            "number_verification_url": os.getenv("OPEN_GATEWAY_NUMBER_VERIFICATION_URL"),
+            "device_phone_number_url": os.getenv("OPEN_GATEWAY_DEVICE_PHONE_NUMBER_URL"),
+            "sim_swap_url": os.getenv("OPEN_GATEWAY_SIM_SWAP_URL"),
+            "sim_swap_date_url": os.getenv("OPEN_GATEWAY_SIM_SWAP_DATE_URL"),
+            "device_location_url": os.getenv("OPEN_GATEWAY_DEVICE_LOCATION_URL"),
+            "kyc_match_url": os.getenv("OPEN_GATEWAY_KYC_MATCH_URL"),
+        }
+
     def _validar_configuracion(self) -> None:
         faltantes = [
             nombre
             for nombre, valor in {
-                "OPEN_GATEWAY_AUTH_URL": self.auth_url,
+                "OPEN_GATEWAY_TOKEN_URL": self.token_url,
                 "OPEN_GATEWAY_CLIENT_ID": self.client_id,
                 "OPEN_GATEWAY_CLIENT_SECRET": self.client_secret,
             }.items()
