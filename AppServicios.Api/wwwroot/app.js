@@ -561,6 +561,16 @@ const chatMessagesList = document.getElementById('chatMessagesList');
 const chatMessageInput = document.getElementById('chatMessageInput');
 const chatSendButton = document.getElementById('chatSendButton');
 const chatFeedback = document.getElementById('chatFeedback');
+const walletState = document.getElementById('walletState');
+const walletAvailableAmount = document.getElementById('walletAvailableAmount');
+const walletHeldAmount = document.getElementById('walletHeldAmount');
+const walletRefreshButton = document.getElementById('walletRefreshButton');
+const walletRequestSelect = document.getElementById('walletRequestSelect');
+const walletCreatePaymentButton = document.getElementById('walletCreatePaymentButton');
+const walletFeedback = document.getElementById('walletFeedback');
+const walletUpdatedAt = document.getElementById('walletUpdatedAt');
+const walletMovementsList = document.getElementById('walletMovementsList');
+const walletProtectedPaymentsList = document.getElementById('walletProtectedPaymentsList');
 const coordinationSync = document.getElementById('coordinationSync');
 const coordDateRange = document.getElementById('coordDateRange');
 const coordCityFilter = document.getElementById('coordCityFilter');
@@ -617,6 +627,8 @@ let cachedServicios = [];
 let cachedClientes = [];
 let cachedProfesionales = [];
 let cachedRequests = [];
+let cachedWallet = null;
+let cachedProtectedPayments = [];
 let currentSession = null;
 let currentSector = '';
 let lastRegisteredClientId = 0;
@@ -820,6 +832,8 @@ function setOfflineState() {
     requestFeedback.textContent = 'No se pudo conectar con la API.';
   }
 
+  resetWalletUi('No se pudo conectar con la API para cargar la billetera.');
+
   if (mapStatus) {
     mapStatus.textContent = 'Sin conexión';
   }
@@ -847,6 +861,338 @@ function formatCurrency(value) {
     currency,
     maximumFractionDigits: 0
   }).format(value);
+}
+
+function formatMoney(value, currency = 'ARS') {
+  const safeCurrency = String(currency || 'ARS').toUpperCase();
+  const locales = safeCurrency === 'USD' ? 'en-US' : safeCurrency === 'EUR' ? 'es-ES' : 'es-AR';
+  return new Intl.NumberFormat(locales, {
+    style: 'currency',
+    currency: safeCurrency,
+    maximumFractionDigits: 0
+  }).format(Number(value || 0));
+}
+
+function getRequestAmount(item) {
+  return Number(item?.presupuestoFinal ?? item?.presupuestoEstimado ?? 0);
+}
+
+function getWalletEligibleRequests() {
+  if (!currentSession?.usuarioId) return [];
+
+  const existingByRequest = new Set(cachedProtectedPayments.map((payment) => Number(payment.solicitudTrabajoId || 0)));
+  return (cachedRequests || []).filter((item) => {
+    const state = String(item.estado || '').toLowerCase();
+    const hasProfessional = Number(item.profesionalId || 0) > 0;
+    const belongsToClient = currentSession.rol === 'Cliente' && Number(item.clienteId || 0) === Number(currentSession.clienteId || 0);
+    const adminCanOperate = currentSession.rol === 'Administrador';
+    return hasProfessional
+      && (state === 'aceptado' || state === 'completado')
+      && !existingByRequest.has(Number(item.id || 0))
+      && (belongsToClient || adminCanOperate);
+  });
+}
+
+function resetWalletUi(message = 'Inicia sesión para consultar saldo y pagos protegidos.') {
+  cachedWallet = null;
+  cachedProtectedPayments = [];
+
+  if (walletState) walletState.textContent = 'Inicia sesión';
+  if (walletAvailableAmount) walletAvailableAmount.textContent = formatMoney(0);
+  if (walletHeldAmount) walletHeldAmount.textContent = formatMoney(0);
+  if (walletUpdatedAt) walletUpdatedAt.textContent = 'Sin actividad';
+  if (walletFeedback) walletFeedback.textContent = message;
+  if (walletRequestSelect) {
+    walletRequestSelect.innerHTML = '<option value="">Inicia sesión para ver solicitudes</option>';
+  }
+  if (walletCreatePaymentButton) {
+    walletCreatePaymentButton.disabled = true;
+    walletCreatePaymentButton.classList.add('is-disabled');
+  }
+  if (walletMovementsList) {
+    walletMovementsList.innerHTML = `
+      <div class="request-item">
+        <strong>Sin sesión activa</strong>
+        <small>Inicia sesión para consultar saldo y movimientos.</small>
+      </div>`;
+  }
+  if (walletProtectedPaymentsList) {
+    walletProtectedPaymentsList.innerHTML = `
+      <div class="request-item">
+        <strong>Sin pagos cargados</strong>
+        <small>Cuando una solicitud aceptada tenga pago protegido, aparecerá aquí.</small>
+      </div>`;
+  }
+}
+
+function fillWalletRequestSelect() {
+  if (!walletRequestSelect) return;
+
+  const eligible = getWalletEligibleRequests();
+  walletRequestSelect.innerHTML = '';
+  const canCreate = currentSession?.usuarioId && currentSession.rol !== 'Profesional' && eligible.length > 0;
+
+  if (walletCreatePaymentButton) {
+    walletCreatePaymentButton.disabled = !canCreate;
+    walletCreatePaymentButton.classList.toggle('is-disabled', !canCreate);
+  }
+
+  if (!currentSession?.usuarioId) {
+    walletRequestSelect.innerHTML = '<option value="">Inicia sesión para ver solicitudes</option>';
+    return;
+  }
+
+  if (currentSession.rol === 'Profesional') {
+    walletRequestSelect.innerHTML = '<option value="">El pago lo inicia el cliente</option>';
+    return;
+  }
+
+  if (eligible.length === 0) {
+    walletRequestSelect.innerHTML = '<option value="">No hay solicitudes aceptadas pendientes de pago</option>';
+    return;
+  }
+
+  eligible.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = String(item.id);
+    option.textContent = `${formatRequestTitle(item)} · ${formatMoney(getRequestAmount(item), 'ARS')}`;
+    walletRequestSelect.appendChild(option);
+  });
+}
+
+function renderWalletSummary(wallet) {
+  const currency = wallet?.moneda || 'ARS';
+  if (walletState) {
+    const held = Number(wallet?.saldoRetenido || 0);
+    walletState.textContent = held > 0 ? 'Fondos retenidos' : 'Billetera activa';
+  }
+  if (walletAvailableAmount) walletAvailableAmount.textContent = formatMoney(wallet?.saldoDisponible || 0, currency);
+  if (walletHeldAmount) walletHeldAmount.textContent = formatMoney(wallet?.saldoRetenido || 0, currency);
+  if (walletUpdatedAt) walletUpdatedAt.textContent = wallet?.fechaActualizacion
+    ? `Actualizada ${formatDateLabel(wallet.fechaActualizacion)}`
+    : 'Sin actividad';
+
+  if (!walletMovementsList) return;
+  const movements = Array.isArray(wallet?.movimientos) ? wallet.movimientos : [];
+  walletMovementsList.innerHTML = '';
+
+  if (movements.length === 0) {
+    walletMovementsList.innerHTML = `
+      <div class="request-item">
+        <strong>Sin movimientos</strong>
+        <small>Los pagos retenidos, liberaciones y reintegros aparecerán aquí.</small>
+      </div>`;
+    return;
+  }
+
+  movements.slice(0, 12).forEach((movement) => {
+    const card = document.createElement('div');
+    card.className = 'request-item';
+    card.innerHTML = `
+      <strong>${escapeHtml(movement.tipo || 'Movimiento')} · ${formatMoney(movement.monto || 0, movement.moneda || currency)}</strong>
+      <small>${escapeHtml(movement.descripcion || 'Movimiento de billetera')}</small>
+      <small>${escapeHtml(movement.estado || 'Registrado')} · ${formatDateLabel(movement.fechaCreacion)} · Ref. ${escapeHtml(movement.referencia || 'N/D')}</small>`;
+    walletMovementsList.appendChild(card);
+  });
+}
+
+function renderProtectedPayments(payments) {
+  if (!walletProtectedPaymentsList) return;
+  walletProtectedPaymentsList.innerHTML = '';
+
+  if (!Array.isArray(payments) || payments.length === 0) {
+    walletProtectedPaymentsList.innerHTML = `
+      <div class="request-item">
+        <strong>Sin pagos protegidos</strong>
+        <small>El cliente puede crear uno cuando un profesional acepta la solicitud.</small>
+      </div>`;
+    return;
+  }
+
+  payments.slice(0, 20).forEach((payment) => {
+    const state = String(payment.estado || '');
+    const stateKey = state.toLowerCase();
+    const isClient = currentSession?.rol === 'Cliente' && Number(payment.clienteId || 0) === Number(currentSession.clienteId || 0);
+    const isProfessional = currentSession?.rol === 'Profesional' && Number(payment.profesionalId || 0) === Number(currentSession.profesionalId || 0);
+    const canConfirm = isClient && stateKey === 'pendientedepago';
+    const canComplete = (isClient || isProfessional) && stateKey === 'pagadoretenido';
+    const canRelease = isClient && (stateKey === 'pagadoretenido' || stateKey === 'trabajocompletado');
+    const canDispute = isProfessional && (stateKey === 'pagadoretenido' || stateKey === 'trabajocompletado');
+    const disputes = Array.isArray(payment.disputas) ? payment.disputas : [];
+    const card = document.createElement('div');
+    card.className = 'request-item wallet-payment-card';
+    card.innerHTML = `
+      <strong>Solicitud #${payment.solicitudTrabajoId} · ${escapeHtml(state || 'Pendiente')}</strong>
+      <small>${escapeHtml(payment.detalle || 'Pago protegido')}</small>
+      <span class="wallet-state-line">Cliente: ${escapeHtml(payment.clienteNombre || 'N/D')} · Profesional: ${escapeHtml(payment.profesionalNombre || 'N/D')}</span>
+      <span class="wallet-state-line">Total ${formatMoney(payment.montoBruto, payment.moneda)} · Profesional ${formatMoney(payment.montoProfesional, payment.moneda)} · Comisión ${formatMoney(payment.comisionMonto, payment.moneda)}</span>
+      <span class="wallet-state-line">Liberación automática: ${payment.fechaVencimientoLiberacion ? formatDateLabel(payment.fechaVencimientoLiberacion) : 'sin fecha'}</span>
+      ${disputes.length ? `<span class="wallet-state-line">Disputa: ${escapeHtml(disputes[0].estado || 'Abierta')} · ${escapeHtml(disputes[0].motivo || '')}</span>` : ''}
+      <div class="inline-actions">
+        ${canConfirm ? `<button class="action-btn accept" data-wallet-action="confirm" data-payment-id="${payment.id}">Confirmar retención</button>` : ''}
+        ${canComplete ? `<button class="action-btn complete" data-wallet-action="complete" data-payment-id="${payment.id}">Trabajo terminado</button>` : ''}
+        ${canRelease ? `<button class="action-btn accept" data-wallet-action="release" data-payment-id="${payment.id}">Liberar pago</button>` : ''}
+        ${canDispute ? `<button class="action-btn reject" data-wallet-action="dispute" data-payment-id="${payment.id}">Abrir disputa</button>` : ''}
+        <button class="action-btn complete" data-open-chat="${payment.solicitudTrabajoId}">Abrir chat</button>
+      </div>`;
+    walletProtectedPaymentsList.appendChild(card);
+  });
+}
+
+async function loadWallet() {
+  if (!walletState) return;
+
+  if (!currentSession?.usuarioId) {
+    resetWalletUi();
+    return;
+  }
+
+  try {
+    if (walletState) walletState.textContent = 'Actualizando...';
+    const [walletResponse, paymentsResponse] = await Promise.all([
+      fetch(`/api/Billetera/usuario/${currentSession.usuarioId}`),
+      fetch(`/api/Billetera/pagos-protegidos?userId=${currentSession.usuarioId}`)
+    ]);
+
+    if (!walletResponse.ok) {
+      throw new Error(await extractApiError(walletResponse));
+    }
+
+    if (!paymentsResponse.ok) {
+      throw new Error(await extractApiError(paymentsResponse));
+    }
+
+    cachedWallet = await walletResponse.json();
+    const payments = await paymentsResponse.json();
+    cachedProtectedPayments = Array.isArray(payments) ? payments : [];
+    renderWalletSummary(cachedWallet);
+    renderProtectedPayments(cachedProtectedPayments);
+    fillWalletRequestSelect();
+
+    if (walletFeedback) {
+      walletFeedback.textContent = currentSession.rol === 'Profesional'
+        ? 'Tus cobros protegidos aparecen retenidos hasta liberación o resolución.'
+        : 'Puedes crear pagos protegidos para solicitudes aceptadas.';
+    }
+  } catch (error) {
+    console.error(error);
+    if (walletState) walletState.textContent = 'Error billetera';
+    if (walletFeedback) walletFeedback.textContent = `No se pudo actualizar billetera: ${error.message || 'intenta nuevamente.'}`;
+  }
+}
+
+async function createProtectedPayment() {
+  if (!currentSession?.usuarioId || (currentSession.rol !== 'Cliente' && currentSession.rol !== 'Administrador')) {
+    if (walletFeedback) walletFeedback.textContent = 'El pago protegido lo inicia el cliente con sesión activa.';
+    return;
+  }
+
+  const requestId = Number(walletRequestSelect?.value || 0);
+  const request = (cachedRequests || []).find((item) => Number(item.id || 0) === requestId);
+  if (!request) {
+    if (walletFeedback) walletFeedback.textContent = 'Selecciona una solicitud aceptada para crear el pago.';
+    return;
+  }
+
+  if (walletCreatePaymentButton) {
+    walletCreatePaymentButton.disabled = true;
+    walletCreatePaymentButton.classList.add('is-disabled');
+  }
+
+  try {
+    const response = await fetch('/api/Billetera/pagos-protegidos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        solicitudTrabajoId: requestId,
+        usuarioOperadorId: Number(currentSession.usuarioId),
+        monto: getRequestAmount(request),
+        moneda: 'ARS'
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(await extractApiError(response));
+    }
+
+    const payment = await response.json();
+    if (walletFeedback) {
+      walletFeedback.textContent = `Pago protegido #${payment.id} creado. Ahora confirma la retención cuando el cobro externo esté validado.`;
+    }
+
+    await Promise.all([loadWallet(), loadCoordinationDashboard()]);
+  } catch (error) {
+    console.error(error);
+    if (walletFeedback) walletFeedback.textContent = `No se pudo crear el pago protegido: ${error.message || 'intenta nuevamente.'}`;
+  } finally {
+    fillWalletRequestSelect();
+  }
+}
+
+async function runProtectedPaymentAction(paymentId, action) {
+  if (!currentSession?.usuarioId) {
+    if (walletFeedback) walletFeedback.textContent = 'Inicia sesión para operar pagos protegidos.';
+    return;
+  }
+
+  const endpoints = {
+    confirm: 'confirmar-pago-demo',
+    complete: 'marcar-trabajo-completado',
+    release: 'liberar'
+  };
+
+  try {
+    let response;
+    if (action === 'dispute') {
+      const motivo = window.prompt('Describe brevemente el motivo de la disputa.');
+      if (!motivo || motivo.trim().length < 10) {
+        if (walletFeedback) walletFeedback.textContent = 'La disputa necesita un motivo de al menos 10 caracteres.';
+        return;
+      }
+
+      response = await fetch(`/api/Billetera/pagos-protegidos/${paymentId}/disputas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuarioOperadorId: Number(currentSession.usuarioId),
+          motivo: motivo.trim()
+        })
+      });
+    } else {
+      const endpoint = endpoints[action];
+      if (!endpoint) return;
+
+      response = await fetch(`/api/Billetera/pagos-protegidos/${paymentId}/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuarioOperadorId: Number(currentSession.usuarioId),
+          detalle: `Accion ${action} desde billetera web`
+        })
+      });
+    }
+
+    if (!response.ok) {
+      throw new Error(await extractApiError(response));
+    }
+
+    const payment = await response.json();
+    const labels = {
+      confirm: 'Pago retenido correctamente.',
+      complete: 'Trabajo marcado como terminado.',
+      release: 'Pago liberado al profesional.',
+      dispute: 'Disputa abierta para revisión.'
+    };
+
+    if (walletFeedback) {
+      walletFeedback.textContent = `${labels[action] || 'Acción realizada'} Estado actual: ${payment.estado || 'procesado'}.`;
+    }
+
+    await Promise.all([loadWallet(), loadProfessionalDashboard(), loadRequests(), loadCoordinationDashboard()]);
+  } catch (error) {
+    console.error(error);
+    if (walletFeedback) walletFeedback.textContent = `No se pudo operar el pago protegido: ${error.message || 'intenta nuevamente.'}`;
+  }
 }
 
 // Hook para actualizar la UI de pagos (placeholder, puedes expandirlo)
@@ -1911,6 +2257,7 @@ function applySessionUI() {
       loginFeedback.textContent = 'Inicia sesión con una cuenta ya registrada para abrir tu panel personalizado.';
     }
 
+    resetWalletUi();
     return;
   }
 
@@ -1965,6 +2312,7 @@ function saveSession(session) {
   applySessionUI();
   startNotificationPolling();
   loadNotifications();
+  loadWallet();
   subscribeToPushNotifications().catch((error) => {
     console.warn('No se pudo activar push en este dispositivo:', error);
   });
@@ -1978,6 +2326,7 @@ function clearSession() {
   localStorage.removeItem(SESSION_KEY);
   applySessionUI();
   loadNotifications();
+  resetWalletUi();
   fillRequestSelectors();
   fillProfessionalSelector();
   loadRequests();
@@ -2011,7 +2360,7 @@ async function restoreSavedSession() {
     });
     fillRequestSelectors();
     fillProfessionalSelector();
-    await Promise.all([loadRequests(), loadProfessionalDashboard(), loadNotifications(), loadCoordinationDashboard()]);
+    await Promise.all([loadRequests(), loadProfessionalDashboard(), loadNotifications(), loadWallet(), loadCoordinationDashboard()]);
   } catch (error) {
     console.error(error);
     clearSession();
@@ -2067,7 +2416,7 @@ async function handleLogin() {
 
     fillRequestSelectors();
     fillProfessionalSelector();
-    await Promise.all([loadRequests(), loadProfessionalDashboard(), loadNotifications(), loadCoordinationDashboard()]);
+    await Promise.all([loadRequests(), loadProfessionalDashboard(), loadNotifications(), loadWallet(), loadCoordinationDashboard()]);
   } catch (error) {
     console.error(error);
     if (loginFeedback) {
@@ -4041,7 +4390,7 @@ async function updateRequestStatus(requestId, action) {
     }
 
     if (proFeedback) proFeedback.textContent = 'Estado actualizado correctamente.';
-    await Promise.all([loadProfessionalDashboard(), loadRequests(), loadCoordinationDashboard()]);
+    await Promise.all([loadProfessionalDashboard(), loadRequests(), loadWallet(), loadCoordinationDashboard()]);
   } catch (error) {
     console.error(error);
     if (proFeedback) proFeedback.textContent = error.message || 'No se pudo actualizar la solicitud.';
@@ -4065,6 +4414,7 @@ async function loadRequests() {
 
     renderRequestList(filteredRequests);
     fillChatRequestSelect();
+    fillWalletRequestSelect();
     renderServiceMap().catch((error) => console.error('No se pudo actualizar el mapa.', error));
 
     if (requestState && currentSession?.clienteId) {
@@ -4190,7 +4540,7 @@ async function publishRequest() {
     if (requestState) requestState.textContent = 'Solicitud publicada';
     if (requestFeedback) requestFeedback.textContent = 'Listo: la solicitud fue creada correctamente.';
 
-    await Promise.all([loadRequests(), loadCoordinationDashboard()]);
+    await Promise.all([loadRequests(), loadWallet(), loadCoordinationDashboard()]);
   } catch (error) {
     console.error(error);
     if (requestState) requestState.textContent = 'Error al publicar';
@@ -4378,6 +4728,32 @@ if (requestRefreshButton) {
     loadRequests().finally(() => {
       if (requestState) requestState.textContent = 'Listo para publicar';
     });
+  });
+}
+
+if (walletRefreshButton) {
+  walletRefreshButton.addEventListener('click', loadWallet);
+}
+
+if (walletCreatePaymentButton) {
+  walletCreatePaymentButton.addEventListener('click', createProtectedPayment);
+}
+
+if (walletProtectedPaymentsList) {
+  walletProtectedPaymentsList.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    const requestId = Number(target.dataset.openChat || 0);
+    if (requestId) {
+      openChatForRequest(requestId);
+      return;
+    }
+
+    const action = target.dataset.walletAction || '';
+    const paymentId = Number(target.dataset.paymentId || 0);
+    if (!action || !paymentId) return;
+    runProtectedPaymentAction(paymentId, action);
   });
 }
 

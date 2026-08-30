@@ -152,6 +152,7 @@
       <a href="#mapa-vivo">Mapa</a>
       <a href="#dashboard-cliente">Dashboard</a>
       <a href="#dashboard-profesional">Panel Pro</a>
+      <a href="#billetera">Billetera</a>
       <a href="#experiencia-app">Demo App</a>
       <a href="#rubros">Rubros</a>
       <a href="#flujo">Cómo funciona</a>
@@ -903,6 +904,88 @@
             <div class="request-item">
               <strong>Sin datos</strong>
               <small>Cuando aceptes solicitudes aparecerán aquí.</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="wallet-dashboard glass-panel" id="billetera">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Billetera segura</p>
+          <h2>Pagos protegidos para clientes y profesionales</h2>
+        </div>
+        <span class="pill" id="walletState">Inicia sesión</span>
+      </div>
+
+      <p class="section-text">
+        El dinero queda retenido hasta finalizar el trabajo o resolver una disputa administrativa.
+      </p>
+
+      <div class="wallet-grid">
+        <div class="wallet-column glass-panel">
+          <div class="request-list-head">
+            <strong>Saldo</strong>
+            <button type="button" class="btn btn-secondary btn-small" id="walletRefreshButton">Actualizar</button>
+          </div>
+
+          <div class="wallet-balance-grid">
+            <article class="wallet-balance-card">
+              <small>Disponible</small>
+              <strong id="walletAvailableAmount">$ 0</strong>
+            </article>
+            <article class="wallet-balance-card">
+              <small>Retenido</small>
+              <strong id="walletHeldAmount">$ 0</strong>
+            </article>
+          </div>
+
+          <div class="payment-box wallet-create-box">
+            <div class="payment-header">
+              <div>
+                <strong>Crear pago protegido</strong>
+                <small>Disponible cuando una solicitud está aceptada por un profesional.</small>
+              </div>
+              <span class="pill">0% comisión lanzamiento</span>
+            </div>
+
+            <label class="form-field">
+              <span>Solicitud aceptada</span>
+              <select id="walletRequestSelect">
+                <option value="">Inicia sesión para ver solicitudes</option>
+              </select>
+            </label>
+
+            <div class="request-actions">
+              <button type="button" class="btn btn-primary" id="walletCreatePaymentButton">Crear pago protegido</button>
+              <span class="mini-note" id="walletFeedback">La billetera se habilita con sesión activa.</span>
+            </div>
+          </div>
+
+          <div class="request-list-head wallet-subhead">
+            <strong>Movimientos</strong>
+            <span class="mini-note" id="walletUpdatedAt">Sin actividad</span>
+          </div>
+
+          <div class="wallet-list" id="walletMovementsList">
+            <div class="request-item">
+              <strong>Sin sesión activa</strong>
+              <small>Inicia sesión para consultar saldo y movimientos.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="wallet-column glass-panel">
+          <div class="request-list-head">
+            <strong>Pagos protegidos</strong>
+            <span class="mini-note">Control compartido con auditoría</span>
+          </div>
+
+          <div class="wallet-list" id="walletProtectedPaymentsList">
+            <div class="request-item">
+              <strong>Sin pagos cargados</strong>
+              <small>Cuando una solicitud aceptada tenga pago protegido, aparecerá aquí.</small>
             </div>
           </div>
         </div>

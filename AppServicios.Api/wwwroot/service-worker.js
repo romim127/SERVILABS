@@ -1,4 +1,4 @@
-const CACHE_NAME = 'appservicios-shell-v12';
+const CACHE_NAME = 'appservicios-shell-v13';
 const APP_SHELL = [
   '/',
   '/index.html',

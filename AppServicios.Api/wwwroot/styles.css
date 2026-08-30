@@ -1609,10 +1609,74 @@ body::selection {
   padding: 1.2rem;
 }
 
+.wallet-dashboard,
 .coordination-dashboard,
 .chat-dashboard {
   margin-top: 1rem;
   padding: 1.2rem;
+}
+
+.wallet-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 1rem;
+}
+
+.wallet-column {
+  padding: 1rem;
+  min-width: 0;
+}
+
+.wallet-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.wallet-balance-card {
+  padding: 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(110, 242, 255, 0.10), rgba(184, 107, 255, 0.08));
+}
+
+.wallet-balance-card small,
+.wallet-meta,
+.wallet-state-line {
+  color: var(--muted);
+}
+
+.wallet-balance-card strong {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 1.35rem;
+}
+
+.wallet-create-box,
+.wallet-subhead {
+  margin-top: 1rem;
+}
+
+.wallet-list {
+  display: grid;
+  gap: 0.65rem;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.wallet-payment-card {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.wallet-payment-card .inline-actions {
+  margin-top: 0.25rem;
+}
+
+.wallet-state-line {
+  display: block;
+  font-size: 0.9rem;
 }
 
 .coordination-toolbar {
@@ -2250,6 +2314,7 @@ body::selection {
   .map-grid,
   .request-grid,
   .pro-grid,
+  .wallet-grid,
   .chat-grid,
   .coordination-toolbar,
   .coordination-main-grid,
@@ -2266,6 +2331,7 @@ body::selection {
   }
 
   .dashboard-kpis,
+  .wallet-balance-grid,
   .status-row {
     grid-template-columns: 1fr;
   }
@@ -2354,6 +2420,7 @@ body::selection {
   .map-showcase,
   .client-dashboard,
   .pro-dashboard,
+  .wallet-dashboard,
   .coordination-dashboard,
   .chat-dashboard,
   .live-section {
