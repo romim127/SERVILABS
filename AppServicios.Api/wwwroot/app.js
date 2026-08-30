@@ -1014,7 +1014,8 @@ function renderProtectedPayments(payments) {
     const stateKey = state.toLowerCase();
     const isClient = currentSession?.rol === 'Cliente' && Number(payment.clienteId || 0) === Number(currentSession.clienteId || 0);
     const isProfessional = currentSession?.rol === 'Profesional' && Number(payment.profesionalId || 0) === Number(currentSession.profesionalId || 0);
-    const canConfirm = isClient && stateKey === 'pendientedepago';
+    const canPay = isClient && (stateKey === 'pendientedepago' || stateKey === 'pagorechazado');
+    const canVerify = (isClient || isProfessional) && (stateKey === 'pendientedepago' || stateKey === 'pagorechazado');
     const canComplete = (isClient || isProfessional) && stateKey === 'pagadoretenido';
     const canRelease = isClient && (stateKey === 'pagadoretenido' || stateKey === 'trabajocompletado');
     const canDispute = isProfessional && (stateKey === 'pagadoretenido' || stateKey === 'trabajocompletado');
@@ -1029,7 +1030,8 @@ function renderProtectedPayments(payments) {
       <span class="wallet-state-line">Liberación automática: ${payment.fechaVencimientoLiberacion ? formatDateLabel(payment.fechaVencimientoLiberacion) : 'sin fecha'}</span>
       ${disputes.length ? `<span class="wallet-state-line">Disputa: ${escapeHtml(disputes[0].estado || 'Abierta')} · ${escapeHtml(disputes[0].motivo || '')}</span>` : ''}
       <div class="inline-actions">
-        ${canConfirm ? `<button class="action-btn accept" data-wallet-action="confirm" data-payment-id="${payment.id}">Confirmar retención</button>` : ''}
+        ${canPay ? `<button class="action-btn accept" data-wallet-action="mp-pay" data-payment-id="${payment.id}">Pagar Mercado Pago</button>` : ''}
+        ${canVerify ? `<button class="action-btn complete" data-wallet-action="mp-verify" data-payment-id="${payment.id}">Verificar pago</button>` : ''}
         ${canComplete ? `<button class="action-btn complete" data-wallet-action="complete" data-payment-id="${payment.id}">Trabajo terminado</button>` : ''}
         ${canRelease ? `<button class="action-btn accept" data-wallet-action="release" data-payment-id="${payment.id}">Liberar pago</button>` : ''}
         ${canDispute ? `<button class="action-btn reject" data-wallet-action="dispute" data-payment-id="${payment.id}">Abrir disputa</button>` : ''}
@@ -1117,10 +1119,11 @@ async function createProtectedPayment() {
 
     const payment = await response.json();
     if (walletFeedback) {
-      walletFeedback.textContent = `Pago protegido #${payment.id} creado. Ahora confirma la retención cuando el cobro externo esté validado.`;
+      walletFeedback.textContent = `Pago protegido #${payment.id} creado. Abriendo Mercado Pago...`;
     }
 
-    await Promise.all([loadWallet(), loadCoordinationDashboard()]);
+    await runProtectedPaymentAction(Number(payment.id), 'mp-pay');
+    await loadCoordinationDashboard();
   } catch (error) {
     console.error(error);
     if (walletFeedback) walletFeedback.textContent = `No se pudo crear el pago protegido: ${error.message || 'intenta nuevamente.'}`;
@@ -1143,6 +1146,62 @@ async function runProtectedPaymentAction(paymentId, action) {
 
   try {
     let response;
+    if (action === 'mp-pay') {
+      response = await fetch(`/api/Billetera/pagos-protegidos/${paymentId}/mercadopago/preference`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuarioOperadorId: Number(currentSession.usuarioId),
+          detalle: 'Checkout Pro para pago protegido'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await extractApiError(response));
+      }
+
+      const preference = await response.json();
+      const checkoutUrl = preference.sandboxEnabled
+        ? (preference.sandboxInitPoint || preference.initPoint || '')
+        : (preference.initPoint || preference.sandboxInitPoint || '');
+
+      if (walletFeedback) {
+        walletFeedback.textContent = preference.message || 'Mercado Pago quedó listo para completar el pago protegido.';
+      }
+
+      if (checkoutUrl) {
+        window.open(checkoutUrl, '_blank', 'noopener');
+      }
+
+      await loadWallet();
+      return;
+    }
+
+    if (action === 'mp-verify') {
+      response = await fetch(`/api/Billetera/pagos-protegidos/${paymentId}/mercadopago/verificar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuarioOperadorId: Number(currentSession.usuarioId),
+          detalle: 'Verificacion manual de pago protegido'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await extractApiError(response));
+      }
+
+      const verification = await response.json();
+      if (walletFeedback) {
+        walletFeedback.textContent = verification.message || (verification.aprobado
+          ? 'Pago acreditado y retenido en billetera.'
+          : 'El pago todavía no figura acreditado.');
+      }
+
+      await Promise.all([loadWallet(), loadProfessionalDashboard(), loadRequests(), loadCoordinationDashboard()]);
+      return;
+    }
+
     if (action === 'dispute') {
       const motivo = window.prompt('Describe brevemente el motivo de la disputa.');
       if (!motivo || motivo.trim().length < 10) {

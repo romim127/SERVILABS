@@ -1,4 +1,7 @@
 using System.Security.Claims;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using AppServicios.Api.Data;
 using AppServicios.Api.Domain;
 using AppServicios.Api.DTOs;
@@ -16,11 +19,16 @@ namespace AppServicios.Api.Controllers
     {
         private readonly AppServiciosDbContext _context;
         private readonly IConfiguration _configuration;
+        private readonly IHttpClientFactory _httpClientFactory;
 
-        public BilleteraController(AppServiciosDbContext context, IConfiguration configuration)
+        public BilleteraController(
+            AppServiciosDbContext context,
+            IConfiguration configuration,
+            IHttpClientFactory httpClientFactory)
         {
             _context = context;
             _configuration = configuration;
+            _httpClientFactory = httpClientFactory;
         }
 
         [HttpGet("usuario/{usuarioId:int}")]
@@ -224,25 +232,202 @@ namespace AppServicios.Api.Controllers
                 return Conflict("Solo se puede confirmar un pago protegido pendiente.");
             }
 
-            var clienteWallet = await GetOrCreateWalletAsync(pago.Cliente.UsuarioId);
-            var profesionalWallet = await GetOrCreateWalletAsync(pago.Profesional.UsuarioId);
-            var now = DateTime.UtcNow;
-
-            pago.Estado = "PagadoRetenido";
-            pago.FechaPago = now;
-            pago.ReferenciaProveedor = string.IsNullOrWhiteSpace(request.Detalle) ? "demo-confirmado" : request.Detalle.Trim();
-
-            clienteWallet.SaldoRetenido += pago.MontoBruto;
-            profesionalWallet.SaldoRetenido += pago.MontoProfesional;
-            Touch(clienteWallet, profesionalWallet);
-
-            AddMovimiento(clienteWallet, pago, "PagoProtegido", "Retenido", pago.MontoBruto, "Pago protegido retenido hasta confirmación o disputa.");
-            AddMovimiento(profesionalWallet, pago, "CobroProtegido", "Retenido", pago.MontoProfesional, "Cobro protegido pendiente de liberación.");
-
-            await _context.SaveChangesAsync();
+            await RetainPaidProtectedPaymentAsync(
+                pago,
+                string.IsNullOrWhiteSpace(request.Detalle) ? "demo-confirmado" : request.Detalle.Trim());
             await RegistrarAuditoriaPagoAsync(request.UsuarioOperadorId, "Pago protegido retenido", pago);
 
             return Ok(ToDto(pago));
+        }
+
+        [HttpPost("pagos-protegidos/{id:int}/mercadopago/preference")]
+        public async Task<ActionResult<MercadoPagoPreferenceDto>> CrearPreferenciaMercadoPago(int id, [FromBody] PagoProtegidoAccionDto request)
+        {
+            var pago = await BasePagosQuery().FirstOrDefaultAsync(p => p.Id == id);
+            if (pago is null)
+            {
+                return NotFound();
+            }
+
+            if (!CanOperateAs(request.UsuarioOperadorId)
+                || !(User.IsInRole("Administrador") || pago.Cliente.UsuarioId == request.UsuarioOperadorId))
+            {
+                return Forbid();
+            }
+
+            if (!string.Equals(pago.Estado, "PendienteDePago", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(pago.Estado, "PagoRechazado", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict("Mercado Pago se genera solo para pagos protegidos pendientes.");
+            }
+
+            var accessToken = GetMercadoPagoAccessToken();
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                return BadRequest("Configura `MercadoPago:AccessToken` y `MercadoPago:PublicKey` para usar Checkout Pro.");
+            }
+
+            var client = CreateMercadoPagoClient(accessToken);
+            var body = new
+            {
+                items = new[]
+                {
+                    new
+                    {
+                        title = $"Pago protegido SERVILABS #{pago.SolicitudTrabajoId}",
+                        description = pago.Detalle,
+                        quantity = 1,
+                        currency_id = pago.Moneda,
+                        unit_price = pago.MontoBruto
+                    }
+                },
+                payer = new
+                {
+                    email = pago.Cliente.Usuario?.Email,
+                    name = pago.Cliente.Usuario?.Nombre
+                },
+                external_reference = pago.ReferenciaExterna,
+                back_urls = new
+                {
+                    success = _configuration["MercadoPago:SuccessUrl"] ?? "http://localhost:5256/pago-resultado.html?status=success",
+                    failure = _configuration["MercadoPago:FailureUrl"] ?? "http://localhost:5256/pago-resultado.html?status=failure",
+                    pending = _configuration["MercadoPago:PendingUrl"] ?? "http://localhost:5256/pago-resultado.html?status=pending"
+                },
+                metadata = new
+                {
+                    pagoProtegidoId = pago.Id,
+                    solicitudTrabajoId = pago.SolicitudTrabajoId,
+                    clienteId = pago.ClienteId,
+                    profesionalId = pago.ProfesionalId,
+                    tipo = "pago-protegido"
+                }
+            };
+
+            var response = await client.PostAsync(
+                $"{GetMercadoPagoBaseUrl().TrimEnd('/')}/checkout/preferences",
+                new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"));
+
+            var content = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                return StatusCode((int)response.StatusCode, $"Mercado Pago no pudo crear la preferencia: {content}");
+            }
+
+            using var document = JsonDocument.Parse(content);
+            var root = document.RootElement;
+            var preferenceId = GetStringProperty(root, "id");
+            var initPoint = GetStringProperty(root, "init_point");
+            var sandboxInitPoint = GetStringProperty(root, "sandbox_init_point");
+            var sandboxEnabled = _configuration.GetValue("MercadoPago:UseSandbox", false);
+
+            pago.Proveedor = "Mercado Pago";
+            pago.Estado = "PendienteDePago";
+            pago.Detalle = $"{pago.Detalle} | PreferenceId={preferenceId}".Trim();
+            await _context.SaveChangesAsync();
+            await RegistrarAuditoriaPagoAsync(request.UsuarioOperadorId, "Preferencia Mercado Pago creada", pago);
+
+            return Ok(new MercadoPagoPreferenceDto(
+                pago.Id,
+                pago.Estado,
+                preferenceId,
+                initPoint,
+                sandboxInitPoint,
+                _configuration["MercadoPago:PublicKey"],
+                sandboxEnabled,
+                "Checkout Pro generado para retener el pago protegido."));
+        }
+
+        [HttpPost("pagos-protegidos/{id:int}/mercadopago/verificar")]
+        public async Task<ActionResult<MercadoPagoVerificationDto>> VerificarMercadoPago(int id, [FromBody] PagoProtegidoAccionDto request)
+        {
+            var pago = await BasePagosQuery().FirstOrDefaultAsync(p => p.Id == id);
+            if (pago is null)
+            {
+                return NotFound();
+            }
+
+            if (!CanOperateAs(request.UsuarioOperadorId) || !await CanAccessPagoAsync(pago))
+            {
+                return Forbid();
+            }
+
+            if (string.Equals(pago.Estado, "PagadoRetenido", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(pago.Estado, "TrabajoCompletado", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(pago.Estado, "Liberado", StringComparison.OrdinalIgnoreCase))
+            {
+                return Ok(new MercadoPagoVerificationDto(
+                    pago.Id,
+                    pago.Estado,
+                    true,
+                    "approved",
+                    pago.ReferenciaProveedor,
+                    "El pago protegido ya está acreditado en billetera."));
+            }
+
+            if (!string.Equals(pago.Estado, "PendienteDePago", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(pago.Estado, "PagoRechazado", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict("Solo se verifican pagos pendientes o ya retenidos.");
+            }
+
+            var accessToken = GetMercadoPagoAccessToken();
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                return BadRequest("Configura `MercadoPago:AccessToken` para verificar el pago contra Mercado Pago.");
+            }
+
+            var client = CreateMercadoPagoClient(accessToken);
+            var url = $"{GetMercadoPagoBaseUrl().TrimEnd('/')}/v1/payments/search?external_reference={Uri.EscapeDataString(pago.ReferenciaExterna)}";
+            var response = await client.GetAsync(url);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return StatusCode((int)response.StatusCode, $"Mercado Pago no pudo verificar el pago: {content}");
+            }
+
+            using var document = JsonDocument.Parse(content);
+            string? providerStatus = null;
+            string? providerId = null;
+
+            if (document.RootElement.TryGetProperty("results", out var results)
+                && results.ValueKind == JsonValueKind.Array
+                && results.GetArrayLength() > 0)
+            {
+                var firstResult = results[0];
+                providerStatus = GetStringProperty(firstResult, "status");
+                providerId = GetStringProperty(firstResult, "id");
+            }
+
+            if (string.Equals(providerStatus, "approved", StringComparison.OrdinalIgnoreCase))
+            {
+                await RetainPaidProtectedPaymentAsync(pago, providerId ?? "mercadopago-approved");
+                await RegistrarAuditoriaPagoAsync(request.UsuarioOperadorId, "Mercado Pago acreditado y retenido", pago);
+            }
+            else if (string.Equals(providerStatus, "rejected", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(providerStatus, "cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                pago.Estado = "PagoRechazado";
+                pago.ReferenciaProveedor = providerId ?? string.Empty;
+                pago.Detalle = $"{pago.Detalle} | MPStatus={providerStatus ?? "N/D"} | MPPaymentId={providerId ?? "N/D"}".Trim();
+                await _context.SaveChangesAsync();
+                await RegistrarAuditoriaPagoAsync(request.UsuarioOperadorId, "Mercado Pago rechazado", pago);
+            }
+
+            var approved = string.Equals(pago.Estado, "PagadoRetenido", StringComparison.OrdinalIgnoreCase);
+            var message = approved
+                ? "Mercado Pago confirmó el cobro y el dinero quedó retenido en billetera."
+                : string.IsNullOrWhiteSpace(providerStatus)
+                    ? "Todavía no hay un pago acreditado en Mercado Pago para esta operación."
+                    : $"Mercado Pago informó el estado `{providerStatus}` para esta operación.";
+
+            return Ok(new MercadoPagoVerificationDto(
+                pago.Id,
+                pago.Estado,
+                approved,
+                providerStatus,
+                providerId,
+                message));
         }
 
         [HttpPost("pagos-protegidos/{id:int}/disputas")]
@@ -430,6 +615,32 @@ namespace AppServicios.Api.Controllers
             .Include(p => p.Disputas).ThenInclude(d => d.Usuario)
             .Include(p => p.Movimientos);
 
+        private async Task RetainPaidProtectedPaymentAsync(PagoServicioProtegido pago, string providerReference)
+        {
+            if (string.Equals(pago.Estado, "PagadoRetenido", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var clienteWallet = await GetOrCreateWalletAsync(pago.Cliente.UsuarioId);
+            var profesionalWallet = await GetOrCreateWalletAsync(pago.Profesional.UsuarioId);
+            var now = DateTime.UtcNow;
+
+            pago.Estado = "PagadoRetenido";
+            pago.FechaPago = now;
+            pago.ReferenciaProveedor = providerReference;
+            pago.Detalle = $"{pago.Detalle} | MPStatus=approved | MPPaymentId={providerReference}".Trim();
+
+            clienteWallet.SaldoRetenido += pago.MontoBruto;
+            profesionalWallet.SaldoRetenido += pago.MontoProfesional;
+            Touch(clienteWallet, profesionalWallet);
+
+            AddMovimiento(clienteWallet, pago, "PagoProtegido", "Retenido", pago.MontoBruto, "Pago protegido retenido hasta confirmación o disputa.");
+            AddMovimiento(profesionalWallet, pago, "CobroProtegido", "Retenido", pago.MontoProfesional, "Cobro protegido pendiente de liberación.");
+
+            await _context.SaveChangesAsync();
+        }
+
         private async Task<ActionResult<PagoServicioProtegidoDto>?> ReleasePaymentAsync(
             PagoServicioProtegido pago,
             int actorUserId,
@@ -611,6 +822,24 @@ namespace AppServicios.Api.Controllers
                 "PagoServicioProtegido",
                 pago.Id,
                 pago.ReferenciaExterna);
+        }
+
+        private HttpClient CreateMercadoPagoClient(string accessToken)
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            return client;
+        }
+
+        private string GetMercadoPagoAccessToken() => _configuration["MercadoPago:AccessToken"] ?? string.Empty;
+
+        private string GetMercadoPagoBaseUrl() => _configuration["MercadoPago:BaseUrl"] ?? "https://api.mercadopago.com";
+
+        private static string GetStringProperty(JsonElement element, string propertyName)
+        {
+            return element.TryGetProperty(propertyName, out var value)
+                ? value.ToString() ?? string.Empty
+                : string.Empty;
         }
 
         private static BilleteraDto ToDto(Billetera wallet) => new(
