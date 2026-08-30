@@ -2,7 +2,7 @@
 
 ## Estado actual
 
-El repo todavia no tiene carpeta `ios/`. Desde Windows podemos dejar lista la configuracion base de Capacitor, pero para compilar, firmar y subir a App Store se necesita:
+El repo ya tiene carpeta `ios/` creada con Capacitor y sincronizada con la app actual. Desde Windows queda lista la configuracion base, pero para compilar, firmar y subir a App Store se necesita:
 
 - Mac con Xcode, o
 - servicio de build cloud con soporte iOS.
@@ -16,14 +16,16 @@ El repo todavia no tiene carpeta `ios/`. Desde Windows podemos dejar lista la co
 - URL publica: `https://appservicios-mn6i.onrender.com`
 - Politica de privacidad: `https://appservicios-mn6i.onrender.com/privacidad.html`
 
-## Crear proyecto iOS con Capacitor
+## Preparar proyecto iOS
 
-En una Mac o entorno con Node:
+En una Mac con Node, Xcode y CocoaPods:
 
 ```bash
 npm install
-npm run ios:add
-npm run cap:sync
+npm run ios:sync
+cd ios/App
+pod install
+cd ../..
 npm run ios:open
 ```
 
@@ -31,7 +33,7 @@ Luego en Xcode:
 
 1. Seleccionar Team de Apple Developer.
 2. Configurar Signing & Capabilities.
-3. Revisar Bundle Identifier.
+3. Revisar Bundle Identifier `com.appservicios.app`.
 4. Generar Archive.
 5. Subir a App Store Connect.
 
@@ -61,7 +63,6 @@ SERVILABS conecta clientes con profesionales y oficios. Para revisar el flujo, u
 
 ## Pendientes
 
-- Crear proyecto iOS en Mac.
 - Definir cuenta Apple Developer final.
 - Configurar certificados/provisioning.
 - Probar en iPhone real.
