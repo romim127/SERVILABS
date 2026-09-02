@@ -516,7 +516,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (goToRegister) {
     goToRegister.addEventListener('click', function(event) {
       event.preventDefault();
-      setWizardStep('register');
+      openFullRegistrationFromWizard();
     });
   }
   const backToLogin = document.getElementById('backToLogin');

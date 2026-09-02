@@ -97,7 +97,7 @@
             <button type="submit" id="wizardFinishBtn">Ingresar</button>
             <div class="step-links">
               <span>¿No tienes cuenta?</span>
-              <a href="#" id="goToRegister">Registrarme</a>
+              <a href="#acceso" id="goToRegister">Registrarme</a>
             </div>
           </div>
           <div class="step step-register">
@@ -1307,6 +1307,82 @@
 
   <div class="toast-host" id="notificationToastHost" aria-live="polite" aria-atomic="true"></div>
 
+  <script>
+    (function () {
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      function setActive(selector, attr, value) {
+        document.querySelectorAll(selector).forEach(function (item) {
+          item.classList.toggle('is-active', item.getAttribute(attr) === value);
+        });
+      }
+
+      function openRegister(event) {
+        if (event) event.preventDefault();
+
+        var wizardName = byId('wizardRegisterName');
+        var wizardEmail = byId('wizardRegisterEmail');
+        var wizardPassword = byId('wizardRegisterPassword');
+        var registerName = byId('registerNameInput');
+        var registerEmail = byId('registerEmailInput');
+        var registerPassword = byId('registerPasswordInput');
+        var rolePreview = byId('rolePreviewInput');
+        var registerFeedback = byId('registerFeedback');
+
+        var wizard = byId('wizardEntry');
+        var header = byId('mainAppHeader');
+        var main = byId('inicio');
+        var footer = byId('mainAppFooter');
+
+        if (wizard) wizard.style.display = 'none';
+        if (header) header.style.display = '';
+        if (main) main.style.display = '';
+        if (footer) footer.style.display = '';
+
+        setActive('[data-auth-tab]', 'data-auth-tab', 'register');
+        setActive('[data-auth-view]', 'data-auth-view', 'register');
+        setActive('[data-account-role]', 'data-account-role', 'cliente');
+
+        if (rolePreview) rolePreview.value = 'Cliente';
+        if (wizardName && wizardName.value.trim() && registerName) registerName.value = wizardName.value.trim();
+        if (wizardEmail && wizardEmail.value.trim() && registerEmail) registerEmail.value = wizardEmail.value.trim();
+        if (wizardPassword && wizardPassword.value && registerPassword) registerPassword.value = wizardPassword.value;
+
+        if (registerFeedback) {
+          registerFeedback.classList.remove('is-error', 'is-success');
+          registerFeedback.textContent = 'Completa telefono, DNI, fecha y ubicacion para crear tu cuenta cliente.';
+        }
+
+        byId('acceso')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      function bindEntryActions() {
+        var goToRegister = byId('goToRegister');
+        var wizardRegisterButton = byId('wizardRegisterButton');
+        var backToLogin = byId('backToLogin');
+
+        if (goToRegister) goToRegister.addEventListener('click', openRegister);
+        if (wizardRegisterButton) wizardRegisterButton.addEventListener('click', openRegister);
+        if (backToLogin) {
+          backToLogin.addEventListener('click', function (event) {
+            event.preventDefault();
+            document.querySelector('#wizardEntry .step-login')?.classList.add('active');
+            document.querySelector('#wizardEntry .step-register')?.classList.remove('active');
+          });
+        }
+      }
+
+      window.servilabsOpenRegister = openRegister;
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindEntryActions);
+      } else {
+        bindEntryActions();
+      }
+    }());
+  </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="/app.js"></script>
   <script src="/ai-assistant-drag.js"></script>
