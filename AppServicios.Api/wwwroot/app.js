@@ -425,6 +425,64 @@ function showAppAfterAuth() {
   if (footer) footer.style.display = '';
 }
 
+function setWizardStep(mode) {
+  const loginStep = document.querySelector('#wizardEntry .step-login');
+  const registerStep = document.querySelector('#wizardEntry .step-register');
+  const wizardMessage = document.getElementById('wizardMessage');
+  const isRegister = mode === 'register';
+
+  loginStep?.classList.toggle('active', !isRegister);
+  registerStep?.classList.toggle('active', isRegister);
+
+  if (wizardMessage) {
+    wizardMessage.innerHTML = isRegister
+      ? `<strong>Crea tu cuenta SERVILABS</strong>
+          <p>Empezá con nombre, email y contraseña. Después completás teléfono, DNI, ubicación y rol dentro de la app.</p>
+          <div class="entry-proof">
+            <span>Cliente o profesional</span>
+            <span>Pagos protegidos</span>
+            <span>Mapa y chat</span>
+          </div>`
+      : `<strong>Trabajo real, coordinación simple y pagos protegidos.</strong>
+          <p>Para comenzar, ingresa tu email y contraseña.<br>
+          Si es tu primer vez, haz clic en “Registrarme”.</p>
+          <div class="entry-proof">
+            <span>Identidad cuidada</span>
+            <span>Chat interno</span>
+            <span>Pagos seguros</span>
+          </div>`;
+  }
+}
+
+function openFullRegistrationFromWizard() {
+  const wizardName = document.getElementById('wizardRegisterName');
+  const wizardEmail = document.getElementById('wizardRegisterEmail');
+  const wizardPassword = document.getElementById('wizardRegisterPassword');
+
+  showAppAfterAuth();
+  setActiveAuthTab('register');
+  setAccountRole('cliente');
+
+  if (wizardName?.value?.trim() && registerNameInput) {
+    registerNameInput.value = wizardName.value.trim();
+  }
+
+  if (wizardEmail?.value?.trim() && registerEmailInput) {
+    registerEmailInput.value = wizardEmail.value.trim();
+  }
+
+  if (wizardPassword?.value && registerPasswordInput) {
+    registerPasswordInput.value = wizardPassword.value;
+  }
+
+  if (registerFeedback) {
+    registerFeedback.classList.remove('is-error', 'is-success');
+    registerFeedback.textContent = 'Completa teléfono, DNI, fecha, ubicación y elegí si sos cliente o profesional.';
+  }
+
+  document.getElementById('acceso')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // Hook para login exitoso
 async function handleLoginAndShowApp(e) {
   e.preventDefault();
@@ -453,6 +511,24 @@ document.addEventListener('DOMContentLoaded', function() {
   const loginForm = document.getElementById('loginForm');
   if (loginForm) {
     loginForm.addEventListener('submit', handleLoginAndShowApp);
+  }
+  const goToRegister = document.getElementById('goToRegister');
+  if (goToRegister) {
+    goToRegister.addEventListener('click', function(event) {
+      event.preventDefault();
+      setWizardStep('register');
+    });
+  }
+  const backToLogin = document.getElementById('backToLogin');
+  if (backToLogin) {
+    backToLogin.addEventListener('click', function(event) {
+      event.preventDefault();
+      setWizardStep('login');
+    });
+  }
+  const wizardRegisterButton = document.getElementById('wizardRegisterButton');
+  if (wizardRegisterButton) {
+    wizardRegisterButton.addEventListener('click', openFullRegistrationFromWizard);
   }
   // Registro
   const registerForm = document.getElementById('registerForm');
