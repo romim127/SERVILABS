@@ -3324,8 +3324,6 @@ function updatePreview() {
   if (previewMessage) previewMessage.textContent = message;
   if (previewUrgency) previewUrgency.textContent = urgency;
   if (previewBudget) previewBudget.textContent = formatCurrency(amount);
-    // Inicializar valores de presupuesto con la moneda correcta
-    updatePreview();
   if (featuredServiceName) featuredServiceName.textContent = selectedText;
 }
 
