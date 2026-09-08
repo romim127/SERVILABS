@@ -414,7 +414,80 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 6000);
   }
 });
-function showAppAfterAuth() {
+function getSessionRoleKey(session = currentSession) {
+  const role = String(session?.rol || '').toLowerCase();
+  if (role.includes('admin')) return 'admin';
+  if (role.includes('profes')) return 'profesional';
+  return 'cliente';
+}
+
+function updateNavigationForShell(roleKey, mode) {
+  document.querySelectorAll('[data-nav-role]').forEach((link) => {
+    const roles = String(link.dataset.navRole || '').split(/\s+/).filter(Boolean);
+    const shouldShow = mode === 'session' && roles.includes(roleKey);
+    link.classList.toggle('is-hidden', !shouldShow);
+  });
+}
+
+function setVisibleAppSections(mode = 'session') {
+  const roleKey = getSessionRoleKey();
+  const sections = [
+    'home-hero',
+    'paneles',
+    'experiencia-app',
+    'acceso',
+    'guia-roles',
+    'mapa-vivo',
+    'dashboard-cliente',
+    'dashboard-profesional',
+    'billetera',
+    'dashboard-coordinacion-real',
+    'chat-solicitud',
+    'rubros',
+    'flujo'
+  ];
+
+  const visible = new Set();
+  if (mode === 'registering') {
+    visible.add('acceso');
+    visible.add('guia-roles');
+  } else if (mode === 'session') {
+    visible.add('acceso');
+    visible.add('guia-roles');
+    visible.add('mapa-vivo');
+    visible.add('billetera');
+    visible.add('chat-solicitud');
+
+    if (roleKey === 'profesional') {
+      visible.add('dashboard-profesional');
+    } else if (roleKey === 'admin') {
+      visible.add('dashboard-cliente');
+      visible.add('dashboard-profesional');
+      visible.add('dashboard-coordinacion-real');
+    } else {
+      visible.add('dashboard-cliente');
+    }
+  }
+
+  sections.forEach((id) => {
+    document.getElementById(id)?.classList.toggle('is-hidden', !visible.has(id));
+  });
+
+  updateNavigationForShell(roleKey, mode);
+}
+
+function showWizardOnly() {
+  document.getElementById('wizardEntry')?.style.removeProperty('display');
+  const header = document.getElementById('mainAppHeader');
+  const main = document.getElementById('inicio');
+  const footer = document.getElementById('mainAppFooter');
+  if (header) header.style.display = 'none';
+  if (main) main.style.display = 'none';
+  if (footer) footer.style.display = 'none';
+  setVisibleAppSections('anonymous');
+}
+
+function showAppAfterAuth(mode = 'session') {
   const wizard = document.getElementById('wizardEntry');
   const header = document.getElementById('mainAppHeader');
   const main = document.getElementById('inicio');
@@ -423,6 +496,7 @@ function showAppAfterAuth() {
   if (header) header.style.display = '';
   if (main) main.style.display = '';
   if (footer) footer.style.display = '';
+  setVisibleAppSections(mode);
 }
 
 function setWizardStep(mode) {
@@ -459,7 +533,7 @@ function openFullRegistrationFromWizard() {
   const wizardEmail = document.getElementById('wizardRegisterEmail');
   const wizardPassword = document.getElementById('wizardRegisterPassword');
 
-  showAppAfterAuth();
+  showAppAfterAuth('registering');
   setActiveAuthTab('register');
   setAccountRole('cliente');
 
@@ -496,14 +570,14 @@ async function handleLoginAndShowApp(e) {
     loginPasswordInput.value = wizPass.value;
   }
   await handleLogin();
-  if (currentSession) showAppAfterAuth();
+  if (currentSession) showAppAfterAuth('session');
 }
 
 // Hook para registro exitoso
 async function handleRegisterAndShowApp(e) {
   e.preventDefault();
   await submitRegistration();
-  if (currentSession) showAppAfterAuth();
+  if (currentSession) showAppAfterAuth('session');
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -726,6 +800,7 @@ let currentDeviceLocation = null;
 let currentVisibleMapItems = [];
 let selectedRouteItem = null;
 let mapLocationWatchId = null;
+let locationPromptRequestedForSession = false;
 const MAP_DEVICE_LOCATION_KEY = 'appservicios-current-location';
 const mapGeoCache = new Map();
 const shownNotificationIds = new Set();
@@ -1808,6 +1883,23 @@ async function requestCurrentLocationForMap(options = {}) {
   }
 }
 
+function requestLocationAfterAuth() {
+  if (!currentSession?.usuarioId || locationPromptRequestedForSession) {
+    return;
+  }
+
+  locationPromptRequestedForSession = true;
+
+  window.setTimeout(() => {
+    requestCurrentLocationForMap({ silent: false, autoWatch: true }).catch((error) => {
+      console.warn('El permiso de ubicacion no quedo activo:', error);
+      if (mapDistanceHint) {
+        mapDistanceHint.textContent = 'Activa el permiso de ubicacion del telefono para aparecer en el mapa y ordenar clientes/profesionales por cercania.';
+      }
+    });
+  }, 700);
+}
+
 async function geocodeLocation(location) {
   const query = normalizeLocationForMap(location);
   if (!query) return null;
@@ -1893,7 +1985,9 @@ function buildMapItems() {
         detail: `${formatCurrency(item.tarifaBase || 0)} · ${item.ubicacion || 'Sin ubicación'}`,
         location: item.ubicacion || '',
         latitud: Number(item.latitud || 0),
-        longitud: Number(item.longitud || 0)
+        longitud: Number(item.longitud || 0),
+        aceptaTrabajoLejano: !!item.aceptaTrabajoLejano,
+        bonoPorDistancia: Number(item.bonoPorDistancia || 0)
       });
     });
   }
@@ -2113,6 +2207,9 @@ function renderMapLegend(items) {
     const distanceLine = Number.isFinite(item.distanceKm)
       ? `<small>A ${formatDistanceKm(item.distanceKm)} de tu ubicación</small>`
       : '';
+    const visibilityLine = item.type === 'profesional' && item.aceptaTrabajoLejano
+      ? '<small>Visibilidad ampliada por aceptar trabajos fuera de radio.</small>'
+      : '';
 
     const card = document.createElement('div');
     card.className = 'map-item';
@@ -2121,6 +2218,7 @@ function renderMapLegend(items) {
       <small>${escapeHtml(item.subtitle)}</small>
       <small>${escapeHtml(item.detail)}</small>
       ${distanceLine}
+      ${visibilityLine}
       <small>${item.source === 'geocoded' ? 'Ubicación aproximada por dirección cargada' : 'Ubicación registrada'}</small>`;
     mapLegendList.appendChild(card);
   });
@@ -2133,6 +2231,86 @@ function renderMapLegend(items) {
   }
 }
 
+function getMapVisibilityScore(item) {
+  const distance = Number.isFinite(item.distanceKm) ? item.distanceKm : Number.MAX_SAFE_INTEGER;
+  const farJobBoost = item.type === 'profesional' && item.aceptaTrabajoLejano
+    ? Math.min(8, 2 + Number(item.bonoPorDistancia || 0) / 250)
+    : 0;
+  return distance - farJobBoost;
+}
+
+async function resolveMapItemsForDisplay(items) {
+  const radiusKm = Number(mapRadiusFilter?.value || 0);
+  const resolvedItems = [];
+
+  for (const item of items) {
+    const coords = await resolveCoordinatesForPayload(item.location, item.latitud, item.longitud);
+    if (isValidMapCoordinate(coords.lat, coords.lng)) {
+      const distanceKm = currentDeviceLocation
+        ? calculateDistanceKm(currentDeviceLocation.lat, currentDeviceLocation.lng, coords.lat, coords.lng)
+        : Number.NaN;
+
+      resolvedItems.push({
+        ...item,
+        lat: coords.lat,
+        lng: coords.lng,
+        source: coords.source,
+        distanceKm
+      });
+    }
+  }
+
+  let visibleItems = [...resolvedItems];
+  if (currentDeviceLocation) {
+    visibleItems.sort((left, right) => {
+      return getMapVisibilityScore(left) - getMapVisibilityScore(right);
+    });
+  }
+
+  if (radiusKm > 0 && currentDeviceLocation) {
+    visibleItems = visibleItems.filter((item) => Number.isFinite(item.distanceKm) && item.distanceKm <= radiusKm);
+  }
+
+  return visibleItems;
+}
+
+function renderStaticServiceMapFallback(visibleItems) {
+  const mapElement = document.getElementById('serviceMap');
+  if (!mapElement) return;
+
+  mapElement.classList.add('map-fallback');
+
+  if (!Array.isArray(visibleItems) || visibleItems.length === 0) {
+    mapElement.innerHTML = `
+      <div class="map-fallback-empty">
+        <strong>Sin puntos para mostrar</strong>
+        <small>Carga ubicaciones o activa tu permiso de ubicacion para ordenar por cercania real.</small>
+      </div>`;
+    return;
+  }
+
+  const lats = visibleItems.map((item) => Number(item.lat)).filter(Number.isFinite);
+  const lngs = visibleItems.map((item) => Number(item.lng)).filter(Number.isFinite);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const latRange = Math.max(maxLat - minLat, 0.01);
+  const lngRange = Math.max(maxLng - minLng, 0.01);
+
+  mapElement.innerHTML = visibleItems.slice(0, 18).map((item, index) => {
+    const meta = getMapMarkerMeta(item.type);
+    const x = 12 + ((Number(item.lng) - minLng) / lngRange) * 76;
+    const y = 88 - ((Number(item.lat) - minLat) / latRange) * 76;
+    const distance = Number.isFinite(item.distanceKm) ? formatDistanceKm(item.distanceKm) : 'ubicacion registrada';
+    return `
+      <div class="map-fallback-marker" style="--marker-x:${x || 50}%; --marker-y:${y || 50}%; --marker-color:${meta.color};">
+        <strong>${meta.emoji} ${escapeHtml(item.title || meta.label)}</strong>
+        <small>${escapeHtml(distance)}</small>
+      </div>`;
+  }).join('');
+}
+
 function ensureServiceMap() {
   const mapElement = document.getElementById('serviceMap');
   if (!mapElement || !window.L) {
@@ -2140,6 +2318,8 @@ function ensureServiceMap() {
   }
 
   if (!serviceMap) {
+    mapElement.classList.remove('map-fallback');
+    mapElement.innerHTML = '';
     serviceMap = window.L.map(mapElement, {
       scrollWheelZoom: false,
       attributionControl: true
@@ -2160,17 +2340,24 @@ function ensureServiceMap() {
 async function renderServiceMap() {
   if (!mapStatus) return;
 
+  const radiusKm = Number(mapRadiusFilter?.value || 0);
+  const items = buildMapItems();
   const mapInstance = ensureServiceMap();
   if (!mapInstance) {
-    mapStatus.textContent = 'Mapa no disponible';
+    const visibleItems = await resolveMapItemsForDisplay(items);
+    currentVisibleMapItems = visibleItems;
+    renderStaticServiceMapFallback(visibleItems);
+    renderMapLegend(visibleItems);
+    mapStatus.textContent = visibleItems.length > 0 ? 'Mapa basico activo' : 'Mapa sin ubicaciones';
     if (mapSummary) {
-      mapSummary.textContent = 'No se pudo inicializar el mapa en este navegador.';
+      mapSummary.textContent = visibleItems.length > 0
+        ? 'Mostrando ubicaciones sin tiles externos del mapa.'
+        : 'No hay puntos con coordenadas para mostrar todavia.';
     }
     return;
   }
 
-  const radiusKm = Number(mapRadiusFilter?.value || 0);
-  const items = buildMapItems();
+  document.getElementById('serviceMap')?.classList.remove('map-fallback');
   if (items.length === 0) {
     if (serviceMapLayer) {
       serviceMapLayer.clearLayers();
@@ -2207,9 +2394,7 @@ async function renderServiceMap() {
 
   if (currentDeviceLocation) {
     visibleItems.sort((left, right) => {
-      const leftDistance = Number.isFinite(left.distanceKm) ? left.distanceKm : Number.MAX_SAFE_INTEGER;
-      const rightDistance = Number.isFinite(right.distanceKm) ? right.distanceKm : Number.MAX_SAFE_INTEGER;
-      return leftDistance - rightDistance;
+      return getMapVisibilityScore(left) - getMapVisibilityScore(right);
     });
   }
 
@@ -2379,6 +2564,7 @@ function applySessionUI() {
   if (!sessionSummary) return;
 
   if (!currentSession) {
+    showWizardOnly();
     sessionSummary.innerHTML = `
       <strong>Sin sesión activa</strong>
       <small>Inicia sesión para ver tu panel personalizado y trabajar con tu cuenta real.</small>`;
@@ -2395,6 +2581,8 @@ function applySessionUI() {
     resetWalletUi();
     return;
   }
+
+  showAppAfterAuth('session');
 
   const rubros = Array.isArray(currentSession.rubros) && currentSession.rubros.length > 0
     ? currentSession.rubros.join(', ')
@@ -2441,10 +2629,12 @@ function applySessionUI() {
 
 function saveSession(session) {
   currentSession = session;
+  locationPromptRequestedForSession = false;
   notificationsInitialized = false;
   shownNotificationIds.clear();
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   applySessionUI();
+  requestLocationAfterAuth();
   startNotificationPolling();
   loadNotifications();
   loadWallet();
@@ -2455,6 +2645,7 @@ function saveSession(session) {
 
 function clearSession() {
   currentSession = null;
+  locationPromptRequestedForSession = false;
   notificationsInitialized = false;
   shownNotificationIds.clear();
   stopNotificationPolling();
@@ -2485,10 +2676,12 @@ async function restoreSavedSession() {
 
     const fresh = await fetchSessionContext(saved.usuarioId);
     currentSession = fresh;
+    locationPromptRequestedForSession = false;
     notificationsInitialized = false;
     shownNotificationIds.clear();
     localStorage.setItem(SESSION_KEY, JSON.stringify(fresh));
     applySessionUI();
+    requestLocationAfterAuth();
     startNotificationPolling();
     subscribeToPushNotifications().catch((error) => {
       console.warn('No se pudo activar push en este dispositivo:', error);

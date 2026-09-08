@@ -340,6 +340,11 @@ body::selection {
   background: rgba(255,255,255,0.06);
 }
 
+[hidden],
+.is-hidden {
+  display: none !important;
+}
+
 .theme-switch {
   display: inline-flex;
   gap: 0.35rem;
@@ -1104,6 +1109,54 @@ body::selection {
   background: linear-gradient(135deg, rgba(110, 242, 255, 0.08), rgba(184, 107, 255, 0.06));
 }
 
+.map-fallback {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  isolation: isolate;
+  background:
+    linear-gradient(rgba(110, 242, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(110, 242, 255, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at 45% 45%, rgba(110, 242, 255, 0.18), transparent 34%),
+    radial-gradient(circle at 65% 60%, rgba(184, 107, 255, 0.16), transparent 30%);
+  background-size: 54px 54px, 54px 54px, auto, auto;
+}
+
+.map-fallback-empty {
+  width: min(360px, calc(100% - 2rem));
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(6, 16, 32, 0.72);
+  text-align: center;
+}
+
+.map-fallback-marker {
+  position: absolute;
+  left: var(--marker-x);
+  top: var(--marker-y);
+  transform: translate(-50%, -50%);
+  display: grid;
+  gap: 0.25rem;
+  min-width: 108px;
+  padding: 0.55rem 0.65rem;
+  border-radius: 16px;
+  border: 1px solid var(--marker-color);
+  background: rgba(6, 16, 32, 0.82);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+}
+
+.map-fallback-marker strong {
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.map-fallback-marker small {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
 .map-legend {
   display: grid;
   gap: 0.75rem;
@@ -1199,6 +1252,56 @@ body::selection {
   grid-template-columns: minmax(320px, 0.95fr) minmax(320px, 1.05fr);
   gap: 1rem;
   align-items: stretch;
+}
+
+.role-guide {
+  margin-top: 1rem;
+  padding: 1.2rem;
+}
+
+.module-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.module-guide-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.module-guide-kicker {
+  width: fit-content;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(110, 242, 255, 0.35);
+  background: rgba(110, 242, 255, 0.11);
+  color: var(--accent);
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.module-guide-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.module-guide-list div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.module-guide-list small {
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .auth-card {
@@ -2311,6 +2414,7 @@ body::selection {
   .workflow,
   .experience-grid,
   .access-grid,
+  .module-guide-grid,
   .map-grid,
   .request-grid,
   .pro-grid,

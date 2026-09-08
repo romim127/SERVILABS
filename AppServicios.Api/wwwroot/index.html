@@ -147,16 +147,14 @@
     </a>
 
     <nav class="nav-links" aria-label="Navegación principal">
-      <a href="#paneles">Experiencia</a>
       <a href="#acceso">Acceso</a>
+      <a href="#guia-roles">Guía</a>
+      <a href="#dashboard-cliente" data-nav-role="cliente admin">Cliente</a>
+      <a href="#dashboard-profesional" data-nav-role="profesional admin">Profesional</a>
       <a href="#mapa-vivo">Mapa</a>
-      <a href="#dashboard-cliente">Dashboard</a>
-      <a href="#dashboard-profesional">Panel Pro</a>
       <a href="#billetera">Billetera</a>
-      <a href="#experiencia-app">Demo App</a>
-      <a href="#rubros">Rubros</a>
-      <a href="#flujo">Cómo funciona</a>
-      <a href="/swagger/index.html">API</a>
+      <a href="#chat-solicitud">Chat</a>
+      <a href="#dashboard-coordinacion-real" data-nav-role="admin">Admin</a>
     </nav>
 
     <div class="theme-switch" role="group" aria-label="Cambiar tema visual">
@@ -176,7 +174,7 @@
   </header>
 
   <main class="shell" id="inicio" style="display:none;">
-    <section class="hero">
+    <section class="hero" id="home-hero">
       <div class="hero-copy glass-panel">
         <div class="brand-banner">
           <img src="/logo.svg?v=11" alt="Logo AppServicios" />
@@ -246,7 +244,7 @@
       </div>
     </section>
 
-    <section class="cards-section" id="paneles">
+    <section class="cards-section is-hidden" id="paneles" hidden>
       <article class="feature-card glass-panel">
         <p class="feature-icon">🙋</p>
         <h2>Cliente</h2>
@@ -266,7 +264,7 @@
       </article>
     </section>
 
-    <section class="app-lab glass-panel" id="experiencia-app">
+    <section class="app-lab glass-panel is-hidden" id="experiencia-app" hidden>
       <div class="section-heading">
         <div>
           <p class="eyebrow">Demo UX/UI interna</p>
@@ -693,6 +691,42 @@
             <span>Acceso rápido</span>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="role-guide glass-panel" id="guia-roles">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Guía operativa</p>
+          <h2>Módulos visibles según tu perfil</h2>
+        </div>
+        <span class="pill">Cliente y profesional</span>
+      </div>
+
+      <div class="module-guide-grid">
+        <article class="module-guide-card">
+          <span class="module-guide-kicker">Cliente</span>
+          <h3>Pide, compara y coordina sin salir de SERVILABS</h3>
+          <div class="module-guide-list">
+            <div><strong>Acceso</strong><small>Creas tu cuenta o entras con email y contraseña.</small></div>
+            <div><strong>Solicitud</strong><small>Publicas el trabajo con servicio, presupuesto, fecha, ubicación y detalle.</small></div>
+            <div><strong>Mapa</strong><small>Ves profesionales, clientes y solicitudes cercanas cuando autorizas ubicación.</small></div>
+            <div><strong>Chat</strong><small>Coordinas horario, dirección y dudas dentro de cada solicitud.</small></div>
+            <div><strong>Billetera</strong><small>Gestionas pagos protegidos cuando la solicitud queda aceptada.</small></div>
+          </div>
+        </article>
+
+        <article class="module-guide-card">
+          <span class="module-guide-kicker">Profesional</span>
+          <h3>Trabaja con radio, métricas propias y más visibilidad</h3>
+          <div class="module-guide-list">
+            <div><strong>Perfil</strong><small>Cargas rubros, experiencia, tarifa, zona base y radio de alcance.</small></div>
+            <div><strong>Mapa</strong><small>Tu ubicación ayuda a que clientes te encuentren por cercanía real.</small></div>
+            <div><strong>Trabajos lejanos</strong><small>Si aceptas trabajos fuera de tu radio, el sistema considera ese esfuerzo para mejorar visibilidad del servicio que brindas.</small></div>
+            <div><strong>Panel Pro</strong><small>Ves solicitudes, trabajos activos y métricas propias de ingresos y operación.</small></div>
+            <div><strong>Chat y pagos</strong><small>Coordinas cada trabajo y sigues cobros protegidos desde la app.</small></div>
+          </div>
+        </article>
       </div>
     </section>
 
@@ -1259,7 +1293,7 @@
       </div>
     </section>
 
-    <section class="live-section glass-panel" id="rubros">
+    <section class="live-section glass-panel is-hidden" id="rubros" hidden>
       <div class="section-heading">
         <div>
           <p class="eyebrow">Rubros conectados a la API</p>
@@ -1277,7 +1311,7 @@
       </div>
     </section>
 
-    <section class="workflow" id="flujo">
+    <section class="workflow is-hidden" id="flujo" hidden>
       <article class="step glass-panel">
         <span>01</span>
         <h3>Elegí tu modo</h3>
@@ -1340,6 +1374,24 @@
         if (header) header.style.display = '';
         if (main) main.style.display = '';
         if (footer) footer.style.display = '';
+
+        [
+          'home-hero',
+          'paneles',
+          'experiencia-app',
+          'mapa-vivo',
+          'dashboard-cliente',
+          'dashboard-profesional',
+          'billetera',
+          'dashboard-coordinacion-real',
+          'chat-solicitud',
+          'rubros',
+          'flujo'
+        ].forEach(function (id) {
+          byId(id)?.classList.add('is-hidden');
+        });
+        byId('acceso')?.classList.remove('is-hidden');
+        byId('guia-roles')?.classList.remove('is-hidden');
 
         setActive('[data-auth-tab]', 'data-auth-tab', 'register');
         setActive('[data-auth-view]', 'data-auth-view', 'register');
