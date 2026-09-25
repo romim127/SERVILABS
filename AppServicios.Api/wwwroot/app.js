@@ -414,6 +414,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 6000);
   }
 });
+
+let currentShellMode = 'wizard';
+
 function getSessionRoleKey(session = currentSession) {
   const role = String(session?.rol || '').toLowerCase();
   if (role.includes('admin')) return 'admin';
@@ -477,6 +480,7 @@ function setVisibleAppSections(mode = 'session') {
 }
 
 function showWizardOnly() {
+  currentShellMode = 'wizard';
   document.getElementById('wizardEntry')?.style.removeProperty('display');
   const header = document.getElementById('mainAppHeader');
   const main = document.getElementById('inicio');
@@ -488,6 +492,7 @@ function showWizardOnly() {
 }
 
 function showAppAfterAuth(mode = 'session') {
+  currentShellMode = mode;
   const wizard = document.getElementById('wizardEntry');
   const header = document.getElementById('mainAppHeader');
   const main = document.getElementById('inicio');
@@ -2564,7 +2569,11 @@ function applySessionUI() {
   if (!sessionSummary) return;
 
   if (!currentSession) {
-    showWizardOnly();
+    if (currentShellMode === 'registering') {
+      setVisibleAppSections('registering');
+    } else {
+      showWizardOnly();
+    }
     sessionSummary.innerHTML = `
       <strong>Sin sesión activa</strong>
       <small>Inicia sesión para ver tu panel personalizado y trabajar con tu cuenta real.</small>`;
@@ -2645,6 +2654,7 @@ function saveSession(session) {
 
 function clearSession() {
   currentSession = null;
+  currentShellMode = 'wizard';
   locationPromptRequestedForSession = false;
   notificationsInitialized = false;
   shownNotificationIds.clear();
