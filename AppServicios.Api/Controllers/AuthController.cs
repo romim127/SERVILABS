@@ -30,6 +30,85 @@ namespace AppServicios.Api.Controllers
             _passwordHasher = passwordHasher;
         }
 
+        [AllowAnonymous]
+        [HttpPost("register-client")]
+        public async Task<ActionResult<AuthSessionDto>> RegisterClient([FromBody] RegisterClientRequestDto request)
+        {
+            var data = request.Usuario;
+            var email = data.Email.Trim().ToLowerInvariant();
+            var dni = data.Dni.Trim();
+            if (data.Rol != "Cliente")
+                ModelState.AddModelError(nameof(data.Rol), "Este registro corresponde a una cuenta Cliente.");
+            if (string.IsNullOrWhiteSpace(data.PasswordHash))
+                ModelState.AddModelError(nameof(data.PasswordHash), "La contraseña es obligatoria.");
+            if (data.FechaNacimiento == default || data.FechaNacimiento.Date > DateTime.UtcNow.Date)
+                ModelState.AddModelError(nameof(data.FechaNacimiento), "Indica una fecha de nacimiento válida.");
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var usuario = await _context.Usuarios.Include(u => u.Cliente)
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+            if (usuario is not null)
+            {
+                // Resume interrupted registrations only after verifying the owner's credentials.
+                if (!usuario.Activo || usuario.Rol != "Cliente" || usuario.DNI != dni
+                    || VerifyPassword(usuario, data.PasswordHash!) == PasswordVerificationResult.Failed)
+                    return Conflict("Ese email o DNI ya está registrado. Inicia sesión con tu cuenta.");
+            }
+            else
+            {
+                if (await _context.Usuarios.AnyAsync(u => u.DNI == dni))
+                    return Conflict("Ese email o DNI ya está registrado. Inicia sesión con tu cuenta.");
+                usuario = new Domain.Usuario
+                {
+                    Nombre = data.Nombre.Trim(), Email = email, Telefono = data.Telefono.Trim(),
+                    DNI = dni, FechaNacimiento = DateTime.SpecifyKind(data.FechaNacimiento, DateTimeKind.Utc),
+                    Rol = "Cliente", Activo = true, VerificadoRenaper = false,
+                    RecibeNotificaciones = data.RecibeNotificaciones
+                };
+                usuario.PasswordHash = _passwordHasher.HashPassword(usuario, data.PasswordHash!);
+                _context.Usuarios.Add(usuario);
+            }
+            if (usuario.Cliente is null)
+            {
+                usuario.Cliente = new Domain.Cliente
+                {
+                    Usuario = usuario, Ubicacion = request.Ubicacion.Trim(),
+                    Latitud = request.Latitud, Longitud = request.Longitud,
+                    Preferencias = request.Preferencias.Trim(), RecibeNotificaciones = data.RecibeNotificaciones
+                };
+            }
+            try
+            {
+                await _context.SaveChangesAsync();
+                var (token, expiresAt) = GenerateJwtToken(usuario);
+                var session = await BuildSessionAsync(usuario.Id, token, expiresAt);
+                await transaction.CommitAsync();
+                return Ok(session);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+            {
+                return Conflict("Ese email o DNI ya está registrado. Inicia sesión o reintenta con los mismos datos.");
+            }
+        }
+
+        [Authorize]
+        [HttpGet("usuarios/{userId:int}/context")]
+        public async Task<ActionResult<AuthSessionDto>> GetContext(int userId)
+        {
+            if (GetAuthenticatedUserId() != userId && !IsCurrentUserAdmin()) return Forbid();
+            var session = await BuildSessionAsync(userId);
+            if (session is null) return NotFound();
+            if (!session.Activo) return Unauthorized("Tu cuenta está suspendida. Contacta al administrador.");
+            return Ok(session);
+        }
+
+        private PasswordVerificationResult VerifyPassword(Domain.Usuario usuario, string password)
+        {
+            try { return _passwordHasher.VerifyHashedPassword(usuario, usuario.PasswordHash, password); }
+            catch (FormatException) { return PasswordVerificationResult.Failed; }
+        }
+
         [HttpPost("login")]
         public async Task<ActionResult<AuthSessionDto>> Login([FromBody] LoginRequestDto request)
         {
@@ -59,11 +138,11 @@ namespace AppServicios.Api.Controllers
             }
 
             var usuario = await _context.Usuarios
-                .FirstOrDefaultAsync(u => u.Email == email);
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
 
             var passwordVerification = usuario is null
                 ? PasswordVerificationResult.Failed
-                : _passwordHasher.VerifyHashedPassword(usuario, usuario.PasswordHash, password);
+                : VerifyPassword(usuario, password);
             var legacyPlaintextMatch = usuario is not null
                 && passwordVerification == PasswordVerificationResult.Failed
                 && string.Equals(usuario.PasswordHash, password, StringComparison.Ordinal);

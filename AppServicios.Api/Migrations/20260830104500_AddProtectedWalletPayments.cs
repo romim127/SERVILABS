@@ -7,7 +7,6 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AppServicios.Api.Migrations
 {
     /// <inheritdoc />
-    [Migration("20260830104500_AddProtectedWalletPayments")]
     public partial class AddProtectedWalletPayments : Migration
     {
         /// <inheritdoc />

@@ -1,9 +1,9 @@
-const CACHE_NAME = 'appservicios-shell-v19';
+const CACHE_NAME = 'appservicios-shell-v20';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css',
-  '/app.js',
+  '/styles.css?v=20',
+  '/app.js?v=20',
   '/logo.svg',
   '/logo.svg?v=11',
   '/favicon.svg',
@@ -96,4 +96,30 @@ self.addEventListener('fetch', (event) => {
       });
     })
   );
+});
+
+// Service Worker para notificaciones push
+self.addEventListener('push', function(event) {
+  let data = {};
+  try {
+    data = event.data.json();
+  } catch {
+    data = { title: 'Notificación', body: event.data && event.data.text() };
+  }
+  const title = data.title || 'Notificación';
+  const options = {
+    body: data.body || '',
+    icon: data.icon || '/ia-avatar.png',
+    badge: data.badge || '/ia-avatar.png',
+    data: data.url ? { url: data.url } : {}
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  const url = event.notification.data && event.notification.data.url;
+  if (url) {
+    event.waitUntil(clients.openWindow(url));
+  }
 });

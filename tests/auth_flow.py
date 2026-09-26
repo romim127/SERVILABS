@@ -1,0 +1,198 @@
+"""End-to-end regression: isolated PostgreSQL + real API + Chrome.
+Requires: pip install playwright psycopg[binary]; installed Chrome, .NET 10 and PostgreSQL.
+Run after dotnet build: python tests/auth_flow.py
+Never connects to the application database or payment providers.
+"""
+import copy
+import json
+import os
+from pathlib import Path
+import shutil
+import socket
+import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from playwright.sync_api import sync_playwright, expect
+import psycopg
+
+ROOT = Path(__file__).resolve().parents[1]
+PG = Path(os.environ.get('PG_BIN', 'C:/Program Files/PostgreSQL/18/bin'))
+
+def free_port():
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1', 0))
+        return sock.getsockname()[1]
+
+def check(condition, message):
+    assert condition, message
+    print('PASS:', message, flush=True)
+
+def run():
+    temp = Path(tempfile.mkdtemp(prefix='servilabs-auth-'))
+    dbport, port = free_port(), free_port()
+    base = f'http://127.0.0.1:{port}'
+    process = None
+    db_started = False
+    logfile = (temp / 'api.log').open('w', encoding='utf-8')
+    try:
+        subprocess.run([str(PG / 'initdb.exe'), '-D', str(temp / 'db'), '-U', 'postgres', '-A', 'trust', '--encoding=UTF8', '--no-locale'], check=True, capture_output=True)
+        subprocess.run([str(PG / 'pg_ctl.exe'), '-D', str(temp / 'db'), '-l', str(temp / 'postgres.log'), '-o', f'-h 127.0.0.1 -p {dbport}', '-w', 'start'], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+        db_started = True
+        env = dict(os.environ)
+        env.update({
+            'ASPNETCORE_ENVIRONMENT': 'Development',
+            'ASPNETCORE_URLS': base,
+            'ConnectionStrings__DefaultConnection': f'Host=127.0.0.1;Port={dbport};Database=postgres;Username=postgres',
+            'SuperAdmin__Email': '', 'SuperAdmin__Password': '',
+            'MercadoPago__AccessToken': '', 'MercadoPago__PublicKey': '',
+            'VAPID__PublicKey': '', 'VAPID__PrivateKey': '',
+            'OpenAI__ApiKey': '', 'OPENAI_API_KEY': '',
+            'Logging__LogLevel__Default': 'Warning'
+        })
+        process = subprocess.Popen(['dotnet', str(ROOT / 'AppServicios.Api/bin/Debug/net10.0/AppServicios.Api.dll')], cwd=ROOT / 'AppServicios.Api', env=env, stdout=logfile, stderr=logfile)
+        def api(path, data=None, token=None, method=None):
+            headers = {'Content-Type': 'application/json'}
+            if token: headers['Authorization'] = 'Bearer ' + token
+            req = urllib.request.Request(base + path, data=json.dumps(data).encode() if data is not None else None, headers=headers, method=method)
+            try: response = urllib.request.urlopen(req, timeout=15)
+            except urllib.error.HTTPError as exc: response = exc
+            body = response.read().decode()
+            return response.status, json.loads(body) if 'json' in response.headers.get('Content-Type', '') else body
+        for _ in range(100):
+            try:
+                if api('/health')[0] == 200: break
+            except (OSError, urllib.error.URLError): pass
+            time.sleep(.2)
+        else: raise AssertionError('Local API did not start: ' + (temp / 'api.log').read_text()[-3000:])
+        def payload(email='test@example.test', dni='90000001'):
+            return {'usuario': {'nombre': 'Cliente Prueba', 'email': email, 'telefono': '1122334455', 'dni': dni, 'fechaNacimiento': '1990-01-01T00:00:00Z', 'rol': 'Cliente', 'passwordHash': ' Test-password-123 ', 'activo': True}, 'ubicacion': 'CABA Argentina', 'latitud': -34.6, 'longitud': -58.4, 'preferencias': ''}
+        data = payload()
+        status, session = api('/api/Auth/register-client', data)
+        if status != 200: print('REGISTRATION RESPONSE', status, str(session)[:3500], flush=True)
+        check(status == 200 and session.get('clienteId') and session.get('accessToken'), 'API creates user, client and authenticated session')
+        token = session['accessToken']
+        status, again = api('/api/Auth/register-client', data)
+        check(status == 200 and again['clienteId'] == session['clienteId'], 'Retry uses the same account and client')
+        bad = copy.deepcopy(data); bad['usuario']['passwordHash'] = 'wrong-password'
+        check(api('/api/Auth/register-client', bad)[0] == 409, 'Duplicate with wrong password cannot take over the account')
+        check(api('/api/Auth/login', {'email': 'TEST@EXAMPLE.TEST', 'password': data['usuario']['passwordHash']})[0] == 200, 'Login supports email case and preserves password whitespace')
+        check(api(f"/api/Auth/usuarios/{session['usuarioId']}/context")[0] == 401, 'Session context requires authentication')
+        check(api(f"/api/Auth/usuarios/{session['usuarioId']}/context", token=token)[0] == 200, 'Owner can restore session context')
+        check(api('/api/Auth/usuarios/99999/context', token=token)[0] == 403, 'Client cannot read another session')
+        check(api('/api/does-not-exist')[0] == 404, 'Unknown API routes return 404 instead of HTML')
+        partial = payload('partial@example.test', '90000002')
+        status, user = api('/api/Usuarios', partial['usuario'])
+        check(status == 201, 'Legacy interrupted signup fixture created')
+        status, resumed = api('/api/Auth/register-client', partial)
+        check(status == 200 and resumed['usuarioId'] == user['id'] and resumed['clienteId'], 'Interrupted legacy registration completes safely')
+        with psycopg.connect(host='127.0.0.1', port=dbport, dbname='postgres', user='postgres', autocommit=True) as db:
+            db.execute("CREATE FUNCTION reject_test_client() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.\"Ubicacion\" = 'FORCE_ROLLBACK' THEN RAISE EXCEPTION 'test failure'; END IF; RETURN NEW; END $$")
+            db.execute('CREATE TRIGGER reject_test_client BEFORE INSERT ON "Clientes" FOR EACH ROW EXECUTE FUNCTION reject_test_client()')
+            rollback = payload('rollback@example.test', '90000003'); rollback['ubicacion'] = 'FORCE_ROLLBACK'
+            check(api('/api/Auth/register-client', rollback)[0] == 500, 'Simulated profile database failure reaches API')
+            count = db.execute('SELECT count(*) FROM "Usuarios" WHERE "Email" = %s', ('rollback@example.test',)).fetchone()[0]
+            check(count == 0, 'Profile failure rolls back user creation')
+            db.execute('DROP TRIGGER reject_test_client ON "Clientes"')
+            db.execute('DROP FUNCTION reject_test_client()')
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(channel='chrome', headless=True)
+            context = browser.new_context(viewport={'width': 412, 'height': 915}, service_workers='block')
+            context.route('https://**/*', lambda route: route.abort())
+            page = context.new_page()
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.goto(base, wait_until='domcontentloaded')
+            expect(page.locator('#wizardEntry')).to_be_visible()
+            page.locator('#wizardEmail').fill('missing@example.test')
+            page.locator('#wizardPassword').fill('wrong-password')
+            page.locator('#wizardFinishBtn').click()
+            expect(page.locator('#wizardLoginFeedback')).to_contain_text('No se pudo iniciar')
+            check(page.locator('#wizardLoginFeedback').is_visible(), 'Login failure is visible on the entry screen')
+            page.locator('#wizardEmail').fill('browser@example.test')
+            page.locator('#wizardPassword').fill('Browser-pass-123')
+            page.locator('#goToRegister').click()
+            expect(page.locator('#registerEmailInput')).to_have_value('browser@example.test')
+            expect(page.locator('#registerPasswordInput')).to_have_value('Browser-pass-123')
+            check(page.locator('#registerNameInput').input_value() == '', 'Signup has no prefilled demo identity')
+            for selector, value in {'#registerNameInput': 'Prueba Navegador', '#registerPhoneInput': '1122334455', '#registerDniInput': '90000004', '#registerBirthDateInput': '1990-01-01', '#registerLocationInput': 'CABA Argentina'}.items():
+                page.locator(selector).fill(value)
+            page.locator('#registerDniInput').fill('123')
+            page.locator('#registerContinueButton').click()
+            expect(page.locator('#registerFeedback')).to_contain_text('DNI debe contener', timeout=15000)
+            check(page.locator('#registerContinueButton').is_enabled(), 'Validation errors are visible and permit correction')
+            page.locator('#registerDniInput').fill('90000004')
+            page.locator('#registerContinueButton').click()
+            expect(page.locator('#dashboard-cliente')).to_be_visible(timeout=15000)
+            stored = page.evaluate("JSON.parse(localStorage.getItem('appservicios-session'))")
+            check(bool(stored.get('accessToken') and stored.get('clienteId')), 'Mobile browser registration opens client dashboard with credentials')
+            page.reload(wait_until='domcontentloaded')
+            expect(page.locator('#dashboard-cliente')).to_be_visible(timeout=15000)
+            restored = page.evaluate("JSON.parse(localStorage.getItem('appservicios-session'))")
+            check(restored['accessToken'] == stored['accessToken'], 'Reload restores session without discarding token')
+            expect(page.locator('#requestClientSelect')).to_have_value(str(stored['clienteId']), timeout=15000)
+            page.locator('#requestBudgetInput').fill('5000')
+            page.locator('#requestLocationInput').fill('CABA Argentina')
+            page.locator('#requestDescriptionInput').fill('Necesito reparar una instalación eléctrica de prueba.')
+            with page.expect_response(lambda response: response.url.endswith('/api/SolicitudesTrabajo') and response.request.method == 'POST') as published:
+                page.locator('#requestSubmitButton').click()
+            if published.value.status != 201: print('REQUEST ERROR', published.value.status, published.value.text()[:1500], flush=True)
+            expect(page.locator('#requestFeedback')).to_contain_text('creada correctamente', timeout=15000)
+            check(True, 'Registered client publishes a service request')
+            page.locator('#chatMessageInput').fill('Mensaje de prueba para coordinar el servicio')
+            page.locator('#chatSendButton').click()
+            expect(page.locator('#chatMessagesList')).to_contain_text('Mensaje de prueba para coordinar el servicio', timeout=15000)
+            check(True, 'Client sends and reads a request chat message')
+            check(api(f"/api/Billetera/usuario/{stored['usuarioId']}", token=stored['accessToken'])[0] == 200, 'Wallet loads using the restored session')
+            page.locator('#logoutButton').click()
+            expect(page.locator('#wizardEntry')).to_be_visible()
+            page.locator('#wizardEmail').fill('browser@example.test')
+            page.locator('#wizardPassword').fill('Browser-pass-123')
+            page.locator('#wizardFinishBtn').click()
+            expect(page.locator('#dashboard-cliente')).to_be_visible(timeout=15000)
+            page.locator('#logoutButton').click()
+            page.locator('#goToRegister').click()
+            for selector, value in {'#registerNameInput': 'Profesional Prueba', '#registerEmailInput': 'professional@example.test', '#registerPasswordInput': 'Professional-pass-123', '#registerPhoneInput': '1122334455', '#registerDniInput': '90000005', '#registerBirthDateInput': '1990-01-01', '#registerLocationInput': 'CABA Argentina'}.items():
+                page.locator(selector).fill(value)
+            page.locator('[data-account-role="profesional"]').click()
+            page.locator('#termsCheckbox').check()
+            with page.expect_response(lambda response: '/mercadopago/preference' in response.url) as preference_response:
+                page.locator('#startPaymentButton').click()
+            check(preference_response.value.status == 400, 'Professional payment request is authenticated (provider intentionally unconfigured)')
+            professional = page.evaluate("JSON.parse(localStorage.getItem('appservicios-session'))")
+            check(professional['rol'] == 'Profesional' and professional.get('accessToken'), 'Professional signup obtains credentials before protected calls')
+            # Simulate payment approval only in this isolated database; never contact the provider.
+            with psycopg.connect(host='127.0.0.1', port=dbport, dbname='postgres', user='postgres', autocommit=True) as db:
+                db.execute('UPDATE "PagosProfesionales" SET "Estado" = %s, "FechaAprobacion" = now() WHERE "UsuarioId" = %s', ('Aprobado', professional['usuarioId']))
+            page.route('**/mercadopago/verificar', lambda route: route.fulfill(status=200, content_type='application/json', body=json.dumps({'aprobado': True, 'estado': 'Aprobado'})))
+            page.locator('#verifyPaymentButton').click()
+            expect(page.locator('#registerContinueButton')).to_be_enabled()
+            page.route('**/api/Profesionales', lambda route: route.fulfill(status=503, content_type='application/json', body=json.dumps({'message': 'Fallo temporal de prueba'})), times=1)
+            page.locator('#registerContinueButton').click()
+            expect(page.locator('#registerFeedback')).to_be_visible()
+            expect(page.locator('#registerFeedback')).to_contain_text('Fallo temporal de prueba')
+            check(not page.locator('#dashboard-profesional').is_visible(), 'Failed professional activation stays on the form with a visible error')
+            page.locator('#registerContinueButton').click()
+            expect(page.locator('#dashboard-profesional')).to_be_visible(timeout=15000)
+            profile = page.evaluate("JSON.parse(localStorage.getItem('appservicios-session'))")
+            check(bool(profile.get('profesionalId') and profile.get('accessToken')), 'Professional profile activation retains its access token')
+            page.reload(wait_until='domcontentloaded')
+            expect(page.locator('#dashboard-profesional')).to_be_visible(timeout=15000)
+            check(True, 'Professional dashboard restores after reload')
+            check(not errors, 'No JavaScript runtime errors: ' + repr(errors))
+            browser.close()
+    finally:
+        if process:
+            process.terminate()
+            try: process.wait(timeout=10)
+            except subprocess.TimeoutExpired: process.kill(); process.wait()
+        logfile.close()
+        if db_started:
+            subprocess.run([str(PG / 'pg_ctl.exe'), '-D', str(temp / 'db'), '-m', 'immediate', '-w', 'stop'], capture_output=True)
+        # Only the unique temporary directory created above can be removed.
+        if temp.parent == Path(tempfile.gettempdir()) and temp.name.startswith('servilabs-auth-'):
+            shutil.rmtree(temp, ignore_errors=True)
+
+if __name__ == '__main__':
+    run()

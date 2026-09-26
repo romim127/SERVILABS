@@ -123,10 +123,20 @@ app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapFallback("/api/{**path}", () => Results.NotFound(new { message = "La ruta de la API no existe." }));
 app.MapFallbackToFile("index.html");
 
 // Health check
-app.MapGet("/health", () => new { status = "healthy" });
+app.MapGet("/health", async (AppServiciosDbContext db) =>
+{
+    try
+    {
+        if (await db.Database.CanConnectAsync() && !(await db.Database.GetPendingMigrationsAsync()).Any())
+            return Results.Ok(new { status = "healthy" });
+    }
+    catch { /* Readiness must reflect database failures without exposing connection details. */ }
+    return Results.Json(new { status = "unhealthy" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+});
 
 var summaries = new[]
 {

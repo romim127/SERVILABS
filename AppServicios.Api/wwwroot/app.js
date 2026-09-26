@@ -301,22 +301,16 @@ if (aiAssistantForm) {
   });
 }
 
-// Mensaje proactivo al abrir mapa (sin redeclarar mapStatus)
-if (typeof mapStatus !== 'undefined' && mapStatus) {
-  mapStatus.addEventListener('DOMSubtreeModified', function() {
-    if (aiAssistantMessages && aiAssistantPanel && aiAssistantPanel.style.display !== 'block') {
-      appendAiMessage('¿Quieres ver profesionales o clientes cerca tuyo en el mapa? Usa los filtros o pregúntame aquí.', 'bot');
-    }
-  });
-}
-
 // --- FIN ASISTENTE IA FLOTANTE ---
 // Ejemplo de recordatorio proactivo al iniciar sesión
 // Mensaje IA proactivo si el usuario no ha interactuado hoy
 document.addEventListener('DOMContentLoaded', function() {
     // --- AVISOS IA PROACTIVOS ---
     // Simulación de datos de usuario y actividad
-    const userRole = (currentSession && currentSession.rol) || '';
+    const userRole = String(currentSession?.rol || '').toLowerCase();
+    const userId = currentSession?.usuarioId;
+    const userName = currentSession?.nombre || '';
+    const userProfile = (currentSession?.rubros || []).join(' ');
     // --- AVISOS IA REALES ---
     // userId ya declarado arriba
     if (userRole === 'profesional' && userId) {
@@ -473,7 +467,11 @@ function setVisibleAppSections(mode = 'session') {
   }
 
   sections.forEach((id) => {
-    document.getElementById(id)?.classList.toggle('is-hidden', !visible.has(id));
+    const section = document.getElementById(id);
+    if (section) {
+      section.hidden = !visible.has(id);
+      section.classList.toggle('is-hidden', !visible.has(id));
+    }
   });
 
   updateNavigationForShell(roleKey, mode);
@@ -535,8 +533,8 @@ function setWizardStep(mode) {
 
 function openFullRegistrationFromWizard() {
   const wizardName = document.getElementById('wizardRegisterName');
-  const wizardEmail = document.getElementById('wizardRegisterEmail');
-  const wizardPassword = document.getElementById('wizardRegisterPassword');
+  const wizardEmail = document.getElementById('wizardRegisterEmail')?.value ? document.getElementById('wizardRegisterEmail') : document.getElementById('wizardEmail');
+  const wizardPassword = document.getElementById('wizardRegisterPassword')?.value ? document.getElementById('wizardRegisterPassword') : document.getElementById('wizardPassword');
 
   showAppAfterAuth('registering');
   setActiveAuthTab('register');
@@ -575,14 +573,12 @@ async function handleLoginAndShowApp(e) {
     loginPasswordInput.value = wizPass.value;
   }
   await handleLogin();
-  if (currentSession) showAppAfterAuth('session');
 }
 
 // Hook para registro exitoso
 async function handleRegisterAndShowApp(e) {
   e.preventDefault();
   await submitRegistration();
-  if (currentSession) showAppAfterAuth('session');
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -837,7 +833,15 @@ window.fetch = (input, init = {}) => {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  return nativeFetch(input, { ...init, headers });
+  if (!isApiCall || init.signal) return nativeFetch(input, { ...init, headers });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 45000);
+  return nativeFetch(input, { ...init, headers, signal: controller.signal })
+    .catch((error) => {
+      if (error.name === 'AbortError') throw new Error('El servidor demoró demasiado. Reintenta con los mismos datos.');
+      throw error;
+    })
+    .finally(() => clearTimeout(timer));
 };
 
 function persistCurrentDeviceLocation() {
@@ -1465,61 +1469,34 @@ function escapeHtml(value) {
 async function extractApiError(response) {
   try {
     const contentType = response.headers.get('content-type') || '';
-    hydrateMapGeoCache();
-    hydrateCurrentDeviceLocation();
-
-  // --- INICIO: Geolocalización automática y fallback por IP ---
-  async function detectAndApplyInitialLocation() {
-    // 1. Intentar obtener ubicación por navegador/Capacitor
-    try {
-      const position = await getCurrentMapPosition();
-      await applyDetectedPosition(position, { render: true, resolveLabel: true });
-      await startWatchingCurrentLocationForMap();
-      return;
-    } catch (geoError) {
-      // 2. Si falla, intentar obtener por IP
-      try {
-        if (mapStatus) mapStatus.textContent = 'Buscando ubicación por IP...';
-        const resp = await fetch('https://ipapi.co/json');
-        if (!resp.ok) throw new Error('IP geolocation failed');
-        const data = await resp.json();
-        if (isValidMapCoordinate(data.latitude, data.longitude)) {
-          await applyDetectedPosition({ lat: data.latitude, lng: data.longitude, source: 'ip' }, { render: true, resolveLabel: true });
-          if (mapStatus) mapStatus.textContent = 'Ubicación aproximada por IP';
-          return;
-        }
-      } catch (ipError) {
-        // 3. Si ambos fallan, centrar mapa global
-        if (mapStatus) mapStatus.textContent = 'No se pudo detectar ubicación, mostrando mapa global.';
-        const mapInstance = ensureServiceMap();
-        if (mapInstance) {
-          mapInstance.setView([20, 0], 2); // Zoom global
-          window.setTimeout(() => mapInstance.invalidateSize(), 120);
-        }
-      }
-    }
-  }
-  // --- FIN: Geolocalización automática y fallback por IP ---
-
-  // Lanzar la detección automática al cargar la app (después de hidratar cachés)
-  window.addEventListener('DOMContentLoaded', () => {
-    detectAndApplyInitialLocation();
-  });
-    if (contentType.includes('application/json')) {
+    if (contentType.includes('json')) {
       const body = await response.json();
-
-      if (body?.errors) {
-        return Object.values(body.errors).flat().join(' ');
-      }
-
-      return body?.title || body?.message || JSON.stringify(body);
+      if (body?.errors) return Object.values(body.errors).flat().join(' ');
+      return body?.message || body?.detail || body?.title || `Error ${response.status}`;
     }
+    if (contentType.includes('text/html')) return 'El servidor no pudo atender la solicitud. Intenta nuevamente.';
+    return (await response.text()) || `Error ${response.status}`;
+  } catch { return `Error ${response.status}`; }
+}
 
-    const text = await response.text();
-    return text || `Error ${response.status}`;
-  } catch {
-    return `Error ${response.status}`;
+async function readAuthSession(response) {
+  if (!response.ok) throw new Error(await extractApiError(response));
+  if (!(response.headers.get('content-type') || '').includes('json')) {
+    throw new Error('El servicio de acceso no está disponible. Intenta nuevamente en unos momentos.');
   }
+  const session = await response.json();
+  if (!session?.usuarioId) throw new Error('El servidor no devolvió una sesión válida.');
+  return session;
+}
+
+async function authenticateAccount(email, password) {
+  const response = await fetch('/api/Auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  const session = await readAuthSession(response);
+  if (!session.accessToken) throw new Error('El servidor no devolvió las credenciales de acceso.');
+  return session;
 }
 
 function hydrateMapGeoCache() {
@@ -1622,6 +1599,7 @@ async function reverseGeocodeCoordinates(lat, lng) {
   try {
     const endpoint = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`;
     const response = await nativeFetch(endpoint, {
+      signal: AbortSignal.timeout(5000),
       headers: {
         'Accept': 'application/json',
         'Accept-Language': 'es-AR'
@@ -1916,6 +1894,7 @@ async function geocodeLocation(location) {
   try {
     const endpoint = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=ar&q=${encodeURIComponent(query)}`;
     const response = await nativeFetch(endpoint, {
+      signal: AbortSignal.timeout(5000),
       headers: {
         'Accept': 'application/json',
         'Accept-Language': 'es-AR'
@@ -2558,11 +2537,10 @@ function getCurrentAccountRole() {
 
 async function fetchSessionContext(userId) {
   const response = await fetch(`/api/Auth/usuarios/${userId}/context`);
-  if (!response.ok) {
-    throw new Error(await extractApiError(response));
-  }
-
-  return response.json();
+  const session = await readAuthSession(response);
+  const saved = currentSession || JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+  return { ...session, accessToken: session.accessToken || saved?.accessToken,
+    accessTokenExpiresAt: session.accessTokenExpiresAt || saved?.accessTokenExpiresAt };
 }
 
 function applySessionUI() {
@@ -2679,7 +2657,7 @@ async function restoreSavedSession() {
 
   try {
     const saved = JSON.parse(raw);
-    if (!saved?.usuarioId) {
+    if (!saved?.usuarioId || !saved.accessToken || (saved.accessTokenExpiresAt && Date.parse(saved.accessTokenExpiresAt) <= Date.now())) {
       clearSession();
       return;
     }
@@ -2705,36 +2683,31 @@ async function restoreSavedSession() {
   }
 }
 
+let loginInFlight = false;
+function setLoginFeedback(message, isError = false) {
+  [loginFeedback, document.getElementById('wizardLoginFeedback')].forEach((element) => {
+    if (!element) return;
+    element.textContent = message;
+    element.classList.toggle('is-error', isError);
+    element.classList.remove('is-success');
+  });
+}
+
 async function handleLogin() {
+  if (loginInFlight) return;
   const email = loginEmailInput?.value.trim() || '';
   const password = loginPasswordInput?.value || '';
 
   if (!email || password.length < 6) {
-    if (loginFeedback) {
-      loginFeedback.classList.remove('is-success');
-      loginFeedback.classList.add('is-error');
-      loginFeedback.textContent = 'Ingresa un email válido y una contraseña de al menos 6 caracteres.';
-    }
+    setLoginFeedback('Ingresa un email válido y una contraseña de al menos 6 caracteres.', true);
     return;
   }
-
-  if (loginButton) {
-    loginButton.disabled = true;
-    loginButton.classList.add('is-disabled');
-  }
-
+  loginInFlight = true;
+  const buttons = [loginButton, document.getElementById('wizardFinishBtn')].filter(Boolean);
+  buttons.forEach((button) => { button.disabled = true; });
+  setLoginFeedback('Ingresando...');
   try {
-    const response = await fetch('/api/Auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-
-    if (!response.ok) {
-      throw new Error(await extractApiError(response));
-    }
-
-    const session = await response.json();
+    const session = await authenticateAccount(email, password);
     saveSession(session);
 
     if (session.rol === 'Profesional') {
@@ -2757,16 +2730,10 @@ async function handleLogin() {
     await Promise.all([loadRequests(), loadProfessionalDashboard(), loadNotifications(), loadWallet(), loadCoordinationDashboard()]);
   } catch (error) {
     console.error(error);
-    if (loginFeedback) {
-      loginFeedback.classList.remove('is-success');
-      loginFeedback.classList.add('is-error');
-      loginFeedback.textContent = `No se pudo iniciar sesión: ${error.message || 'revisa tus credenciales.'}`;
-    }
+    setLoginFeedback(`No se pudo iniciar sesión: ${error.message || 'revisa tus credenciales.'}`, true);
   } finally {
-    if (loginButton) {
-      loginButton.disabled = false;
-      loginButton.classList.remove('is-disabled');
-    }
+    loginInFlight = false;
+    buttons.forEach((button) => { button.disabled = false; });
   }
 }
 
@@ -2849,71 +2816,21 @@ function getRegistrationBaseData() {
 }
 
 async function createOrUpdateProfessionalUser(userPayload) {
-  const sendUserRequest = async (method, endpoint) => {
-    const response = await fetch(endpoint, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userPayload)
+  if (!pendingProfessionalUserId) {
+    const response = await fetch('/api/Usuarios', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(userPayload)
     });
-
-    return response;
-  };
-
-  const isUpdate = pendingProfessionalUserId > 0;
-  const endpoint = isUpdate ? `/api/Usuarios/${pendingProfessionalUserId}` : '/api/Usuarios';
-  const method = isUpdate ? 'PUT' : 'POST';
-
-  let response = await sendUserRequest(method, endpoint);
-
-  if (!response.ok && !isUpdate) {
-    const apiError = await extractApiError(response);
-    const duplicateDetected = /Ya existe un usuario con ese email|Ya existe un usuario con ese DNI/i.test(apiError);
-
-    if (duplicateDetected) {
-      const loginResponse = await fetch('/api/Auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: userPayload.email,
-          password: userPayload.passwordHash
-        })
-      });
-
-      if (loginResponse.ok) {
-        const session = await loginResponse.json();
-
-        if (String(session.rol || '').toLowerCase() === 'profesional' && Number(session.usuarioId || 0) > 0) {
-          pendingProfessionalUserId = Number(session.usuarioId || 0);
-          response = await sendUserRequest('PUT', `/api/Usuarios/${pendingProfessionalUserId}`);
-
-          if (!response.ok) {
-            throw new Error(await extractApiError(response));
-          }
-
-          const reusedUser = await response.json();
-
-          if (paymentFeedback) {
-            paymentFeedback.classList.remove('is-error');
-            paymentFeedback.textContent = 'Recuperamos tu cuenta profesional existente y continuaremos con la orden de pago.';
-          }
-
-          return reusedUser;
-        }
-      }
-
-      throw new Error('Ese email o DNI ya está registrado. Inicia sesión con esa cuenta o cambia los datos si quieres crear una nueva.');
+    if (!response.ok) {
+      const message = await extractApiError(response);
+      if (!/Ya existe un usuario con ese email|Ya existe un usuario con ese DNI/i.test(message)) throw new Error(message);
     }
-
-    throw new Error(apiError);
   }
-
-  if (!response.ok) {
-    throw new Error(await extractApiError(response));
-  }
-
-  const user = await response.json();
-  pendingProfessionalUserId = Number(user.id || 0);
-  return user;
+  const session = await authenticateAccount(userPayload.email, userPayload.passwordHash);
+  if (session.rol !== 'Profesional') throw new Error('Esta cuenta no corresponde a un profesional.');
+  pendingProfessionalUserId = Number(session.usuarioId);
+  currentSession = session;
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  return { id: session.usuarioId };
 }
 
 async function startProfessionalPayment() {
@@ -3272,7 +3189,7 @@ function suggestSectorFromDescription(text) {
 
 function updateRegisterGate() {
   const isProfessional = getCurrentAccountRole() === 'profesional';
-  if (!registerContinueButton) return;
+  if (!registerContinueButton || registrationInFlight) return;
 
   if (isProfessional) {
     const accepted = !!termsCheckbox?.checked;
@@ -3347,7 +3264,9 @@ function resolveSelectedRubroIds() {
   return fallbackMatches.map((rubro) => rubro.id);
 }
 
+let registrationInFlight = false;
 async function submitRegistration() {
+  if (registrationInFlight) return;
   const data = getRegistrationBaseData();
   const isProfessional = data.isProfessional;
 
@@ -3364,7 +3283,9 @@ async function submitRegistration() {
     return;
   }
 
+  registrationInFlight = true;
   if (registerContinueButton) {
+    registerContinueButton.textContent = 'Creando cuenta...';
     registerContinueButton.disabled = true;
     registerContinueButton.classList.add('is-disabled');
   }
@@ -3404,14 +3325,6 @@ async function submitRegistration() {
       const existingProfessionalSession = await fetchSessionContext(ensuredUser.id);
       const existingProfessionalId = Number(existingProfessionalSession?.profesionalId || 0);
 
-      let existingProfessionalData = null;
-      if (existingProfessionalId > 0) {
-        const existingProfessionalResponse = await fetch(`/api/Profesionales/${existingProfessionalId}`);
-        if (existingProfessionalResponse.ok) {
-          existingProfessionalData = await existingProfessionalResponse.json();
-        }
-      }
-
       const professionalCoords = await resolveCoordinatesForPayload(data.ubicacion);
 
       const professionalPayload = {
@@ -3424,28 +3337,21 @@ async function submitRegistration() {
         tarifaBase: tariff,
         radioAlcanceKm: reach,
         gananciaMensualObjetivo: goal,
-        gananciaMensualActual: Number(existingProfessionalData?.gananciaMensualActual || 0),
+        gananciaMensualActual: 0,
         aceptaTrabajoLejano: acceptsFarJobs,
         bonoPorDistancia: acceptsFarJobs ? distanceBonus : 0,
         rubroIds
       };
 
-      const professionalEndpoint = existingProfessionalId > 0
-        ? `/api/Profesionales/${existingProfessionalId}`
-        : '/api/Profesionales';
-      const professionalMethod = existingProfessionalId > 0 ? 'PUT' : 'POST';
-
-      const professionalResponse = await fetch(professionalEndpoint, {
-        method: professionalMethod,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(professionalPayload)
-      });
-
-      if (!professionalResponse.ok) {
-        throw new Error(await extractApiError(professionalResponse));
+      let createdProfessional = { id: existingProfessionalId, usuarioNombre: existingProfessionalSession.nombre };
+      if (!existingProfessionalId) {
+        const professionalResponse = await fetch('/api/Profesionales', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(professionalPayload)
+        });
+        if (!professionalResponse.ok) throw new Error(await extractApiError(professionalResponse));
+        createdProfessional = await professionalResponse.json();
       }
-
-      const createdProfessional = await professionalResponse.json();
       lastRegisteredProfessionalId = Number(createdProfessional.id || 0);
 
       const professionalSession = await fetchSessionContext(ensuredUser.id);
@@ -3456,54 +3362,31 @@ async function submitRegistration() {
         registerFeedback.textContent = `Alta profesional completa: ${createdProfessional.usuarioNombre || data.nombre} quedó registrada en ${currentSector}.`;
       }
     } else {
-      const userResponse = await fetch('/api/Usuarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data.userPayload)
-      });
-
-      if (!userResponse.ok) {
-        throw new Error(await extractApiError(userResponse));
-      }
-
-      const createdUser = await userResponse.json();
-
       const clientCoords = await resolveCoordinatesForPayload(data.ubicacion);
-
-      const clientPayload = {
-        usuarioId: createdUser.id,
-        latitud: clientCoords.lat,
-        longitud: clientCoords.lng,
-        ubicacion: data.ubicacion,
-        preferencias: clientPreferencesInput?.value.trim() || 'Atención clara y seguimiento rápido.',
-        recibeNotificaciones: true
-      };
-
-      const clientResponse = await fetch('/api/Clientes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(clientPayload)
+      const response = await fetch('/api/Auth/register-client', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usuario: data.userPayload, latitud: clientCoords.lat, longitud: clientCoords.lng,
+          ubicacion: data.ubicacion, preferencias: clientPreferencesInput?.value.trim() || ''
+        })
       });
-
-      if (!clientResponse.ok) {
-        throw new Error(await extractApiError(clientResponse));
+      const clientSession = await readAuthSession(response);
+      if (!clientSession.accessToken || !clientSession.clienteId) {
+        throw new Error('No se pudo completar el acceso a tu cuenta. Intenta iniciar sesión.');
       }
-
-      const createdClient = await clientResponse.json();
-      lastRegisteredClientId = Number(createdClient.id || 0);
-
-      const clientSession = await fetchSessionContext(createdUser.id);
+      lastRegisteredClientId = Number(clientSession.clienteId);
       saveSession(clientSession);
-
+      setActiveRole('cliente');
       if (registerFeedback) {
         registerFeedback.classList.add('is-success');
-        registerFeedback.textContent = `Cuenta cliente creada: ${createdClient.usuarioNombre || data.nombre} ya puede publicar solicitudes.`;
+        registerFeedback.textContent = 'Cuenta cliente creada. Ya puedes publicar solicitudes.';
       }
     }
 
-    await loadHomeData();
+    setActiveAuthTab('login');
     const targetId = isProfessional ? 'dashboard-profesional' : 'dashboard-cliente';
     document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    void loadHomeData();
   } catch (error) {
     console.error(error);
     if (registerFeedback) {
@@ -3512,6 +3395,7 @@ async function submitRegistration() {
       registerFeedback.textContent = `No se pudo crear la cuenta: ${error.message || 'revisa los datos e intenta nuevamente.'}`;
     }
   } finally {
+    registrationInFlight = false;
     updateRegisterGate();
   }
 }
@@ -4528,6 +4412,7 @@ function buildRoleAwareRequestsUrl() {
 
 function buildUpsertPayload(item, overrides = {}) {
   const payload = {
+    utcOffsetMinutes: new Date().getTimezoneOffset(),
     usuarioOperadorId: Number(currentSession?.usuarioId || 0),
     clienteId: item.clienteId,
     profesionalId: item.profesionalId,
@@ -4834,6 +4719,7 @@ async function publishRequest() {
   const requestCoords = await resolveCoordinatesForPayload(ubicacion);
 
   const payload = {
+    utcOffsetMinutes: new Date().getTimezoneOffset(),
     usuarioOperadorId: Number(currentSession.usuarioId || 0),
     clienteId,
     profesionalId: null,
@@ -4869,8 +4755,7 @@ async function publishRequest() {
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(errorBody || 'No se pudo publicar la solicitud.');
+      throw new Error(await extractApiError(response));
     }
 
     if (requestState) requestState.textContent = 'Solicitud publicada';
@@ -4880,7 +4765,7 @@ async function publishRequest() {
   } catch (error) {
     console.error(error);
     if (requestState) requestState.textContent = 'Error al publicar';
-    if (requestFeedback) requestFeedback.textContent = 'No se pudo publicar. Verifica clientes y servicios existentes.';
+    if (requestFeedback) requestFeedback.textContent = `No se pudo publicar: ${error.message || 'intenta nuevamente.'}`;
   } finally {
     if (requestSubmitButton) requestSubmitButton.removeAttribute('disabled');
   }
@@ -5022,9 +4907,7 @@ if (coordPdfButton) {
   element.addEventListener('change', loadCoordinationDashboard);
 });
 
-if (registerContinueButton) {
-  registerContinueButton.addEventListener('click', submitRegistration);
-}
+
 
 [
   registerNameInput,
@@ -5373,7 +5256,7 @@ async function loadHomeData() {
   }
 }
 
-loadHomeData().finally(() => {
+restoreSavedSession().finally(() => {
   startCoordinationPolling();
-  restoreSavedSession();
+  loadHomeData();
 });

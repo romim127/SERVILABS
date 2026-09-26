@@ -206,7 +206,7 @@ namespace AppServicios.Api.Controllers
 
             if (!string.IsNullOrWhiteSpace(request.PasswordHash))
             {
-                usuario.PasswordHash = _passwordHasher.HashPassword(usuario, request.PasswordHash.Trim());
+                usuario.PasswordHash = _passwordHasher.HashPassword(usuario, request.PasswordHash);
             }
             else if (isCreate)
             {
@@ -1002,6 +1002,15 @@ namespace AppServicios.Api.Controllers
 
         private async Task ValidateSolicitudAsync(SolicitudTrabajoUpsertDto request, SolicitudTrabajo? current)
         {
+            // Compare calendar days in the caller's timezone, and allow completing older requests.
+            if ((current is null || request.FechaRequerida != current.FechaRequerida)
+                && (request.FechaRequerida == default
+                    || request.FechaRequerida.AddMinutes(-request.UtcOffsetMinutes).Date
+                        < DateTime.UtcNow.AddMinutes(-request.UtcOffsetMinutes).Date))
+            {
+                ModelState.AddModelError(nameof(request.FechaRequerida), "La fecha requerida no puede ser anterior a hoy.");
+            }
+
             if (!await _context.Clientes.AnyAsync(c => c.Id == request.ClienteId))
             {
                 ModelState.AddModelError(nameof(request.ClienteId), "El cliente indicado no existe.");

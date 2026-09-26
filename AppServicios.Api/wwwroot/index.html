@@ -13,19 +13,8 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=11" />
   <link rel="apple-touch-icon" href="/icon-192.svg?v=11" />
   <link rel="manifest" href="/manifest.webmanifest?v=11" />
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function() {
-        navigator.serviceWorker.register('/sw.js').then(function(reg) {
-          console.log('Service Worker registrado:', reg);
-        }).catch(function(err) {
-          console.warn('Error registrando Service Worker:', err);
-        });
-      });
-    }
-  </script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=20" />
 </head>
 <body>
     <!-- ASISTENTE IA FLOTANTE -->
@@ -95,6 +84,7 @@
             <label>Contraseña</label>
             <input id="wizardPassword" type="password" placeholder="Contraseña" required />
             <button type="submit" id="wizardFinishBtn">Ingresar</button>
+            <p id="wizardLoginFeedback" class="mini-note register-feedback" role="status" aria-live="polite"></p>
             <div class="step-links">
               <span>¿No tienes cuenta?</span>
               <a href="#acceso" id="goToRegister">Registrarme</a>
@@ -476,41 +466,41 @@
             <p class="mini-note register-feedback" id="loginFeedback">Inicia sesión con una cuenta ya registrada para abrir tu panel personalizado.</p>
           </div>
 
-          <div class="auth-view" data-auth-view="register">
+          <form id="registerForm" class="auth-view" data-auth-view="register">
             <label class="form-field">
               <span>Nombre completo</span>
-              <input class="text-input" id="registerNameInput" type="text" value="María López" />
+              <input class="text-input" id="registerNameInput" type="text" required placeholder="Tu nombre completo" />
             </label>
             <label class="form-field">
               <span>Email</span>
-              <input class="text-input" id="registerEmailInput" type="email" value="maria@appservicios.com" />
+              <input class="text-input" id="registerEmailInput" type="email" required placeholder="tu@email.com" />
             </label>
 
             <div class="register-split">
               <label class="form-field">
                 <span>Teléfono</span>
-                <input class="text-input" id="registerPhoneInput" type="text" value="1122334455" />
+                <input class="text-input" id="registerPhoneInput" type="text" required placeholder="Tu teléfono" />
               </label>
               <label class="form-field">
                 <span>DNI</span>
-                <input class="text-input" id="registerDniInput" type="text" value="30111222" />
+                <input class="text-input" id="registerDniInput" type="text" required placeholder="Tu DNI" />
               </label>
             </div>
 
             <div class="register-split">
               <label class="form-field">
                 <span>Fecha de nacimiento</span>
-                <input class="text-input" id="registerBirthDateInput" type="date" value="1994-06-10" />
+                <input class="text-input" id="registerBirthDateInput" type="date" required />
               </label>
               <label class="form-field">
                 <span>Ubicación base</span>
-                <input class="text-input" id="registerLocationInput" type="text" value="CABA - Buenos Aires" />
+                <input class="text-input" id="registerLocationInput" type="text" required placeholder="Ciudad y provincia" />
               </label>
             </div>
 
             <label class="form-field">
               <span>Contraseña de acceso</span>
-              <input class="text-input" id="registerPasswordInput" type="password" value="12345678" />
+              <input class="text-input" id="registerPasswordInput" type="password" minlength="6" autocomplete="new-password" required placeholder="Al menos 6 caracteres" />
             </label>
 
             <label class="form-field">
@@ -644,10 +634,10 @@
 
             <div class="auth-footer-row">
               <span class="mini-note" id="registerNote">Onboarding corto con foco en confianza y claridad</span>
-              <button type="button" class="btn btn-secondary" id="registerContinueButton">Crear cuenta cliente</button>
+              <button type="submit" class="btn btn-secondary" id="registerContinueButton">Crear cuenta cliente</button>
             </div>
-            <p class="mini-note register-feedback" id="registerFeedback">Este alta ya puede guardar el perfil en el backend.</p>
-          </div>
+            <p class="mini-note register-feedback" id="registerFeedback" role="status" aria-live="polite">Completa tus datos para crear tu cuenta.</p>
+          </form>
         </div>
 
         <div class="onboarding-card neon-border">
@@ -1341,102 +1331,8 @@
 
   <div class="toast-host" id="notificationToastHost" aria-live="polite" aria-atomic="true"></div>
 
-  <script>
-    (function () {
-      function byId(id) {
-        return document.getElementById(id);
-      }
-
-      function setActive(selector, attr, value) {
-        document.querySelectorAll(selector).forEach(function (item) {
-          item.classList.toggle('is-active', item.getAttribute(attr) === value);
-        });
-      }
-
-      function openRegister(event) {
-        if (event) event.preventDefault();
-
-        var wizardName = byId('wizardRegisterName');
-        var wizardEmail = byId('wizardRegisterEmail');
-        var wizardPassword = byId('wizardRegisterPassword');
-        var registerName = byId('registerNameInput');
-        var registerEmail = byId('registerEmailInput');
-        var registerPassword = byId('registerPasswordInput');
-        var rolePreview = byId('rolePreviewInput');
-        var registerFeedback = byId('registerFeedback');
-
-        var wizard = byId('wizardEntry');
-        var header = byId('mainAppHeader');
-        var main = byId('inicio');
-        var footer = byId('mainAppFooter');
-
-        if (wizard) wizard.style.display = 'none';
-        if (header) header.style.display = '';
-        if (main) main.style.display = '';
-        if (footer) footer.style.display = '';
-
-        [
-          'home-hero',
-          'paneles',
-          'experiencia-app',
-          'mapa-vivo',
-          'dashboard-cliente',
-          'dashboard-profesional',
-          'billetera',
-          'dashboard-coordinacion-real',
-          'chat-solicitud',
-          'rubros',
-          'flujo'
-        ].forEach(function (id) {
-          byId(id)?.classList.add('is-hidden');
-        });
-        byId('acceso')?.classList.remove('is-hidden');
-        byId('guia-roles')?.classList.remove('is-hidden');
-
-        setActive('[data-auth-tab]', 'data-auth-tab', 'register');
-        setActive('[data-auth-view]', 'data-auth-view', 'register');
-        setActive('[data-account-role]', 'data-account-role', 'cliente');
-
-        if (rolePreview) rolePreview.value = 'Cliente';
-        if (wizardName && wizardName.value.trim() && registerName) registerName.value = wizardName.value.trim();
-        if (wizardEmail && wizardEmail.value.trim() && registerEmail) registerEmail.value = wizardEmail.value.trim();
-        if (wizardPassword && wizardPassword.value && registerPassword) registerPassword.value = wizardPassword.value;
-
-        if (registerFeedback) {
-          registerFeedback.classList.remove('is-error', 'is-success');
-          registerFeedback.textContent = 'Completa telefono, DNI, fecha y ubicacion para crear tu cuenta cliente.';
-        }
-
-        byId('acceso')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-
-      function bindEntryActions() {
-        var goToRegister = byId('goToRegister');
-        var wizardRegisterButton = byId('wizardRegisterButton');
-        var backToLogin = byId('backToLogin');
-
-        if (goToRegister) goToRegister.addEventListener('click', openRegister);
-        if (wizardRegisterButton) wizardRegisterButton.addEventListener('click', openRegister);
-        if (backToLogin) {
-          backToLogin.addEventListener('click', function (event) {
-            event.preventDefault();
-            document.querySelector('#wizardEntry .step-login')?.classList.add('active');
-            document.querySelector('#wizardEntry .step-register')?.classList.remove('active');
-          });
-        }
-      }
-
-      window.servilabsOpenRegister = openRegister;
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', bindEntryActions);
-      } else {
-        bindEntryActions();
-      }
-    }());
-  </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=20"></script>
   <script src="/ai-assistant-drag.js"></script>
 </body>
 </html>

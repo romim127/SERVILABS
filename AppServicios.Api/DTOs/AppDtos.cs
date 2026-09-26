@@ -50,6 +50,20 @@ namespace AppServicios.Api.DTOs
         public bool RecibeNotificaciones { get; set; } = true;
     }
 
+    public sealed class RegisterClientRequestDto
+    {
+        [Required]
+        public UsuarioUpsertDto Usuario { get; set; } = new();
+        [Required, StringLength(180, MinimumLength = 3)]
+        public string Ubicacion { get; set; } = string.Empty;
+        [Range(-90, 90)]
+        public double Latitud { get; set; }
+        [Range(-180, 180)]
+        public double Longitud { get; set; }
+        [StringLength(1000)]
+        public string Preferencias { get; set; } = string.Empty;
+    }
+
     public sealed class LoginRequestDto
     {
         [Required(ErrorMessage = "El email es obligatorio.")]
@@ -124,21 +138,21 @@ namespace AppServicios.Api.DTOs
         [StringLength(1200, MinimumLength = 10, ErrorMessage = "La descripción debe tener entre 10 y 1200 caracteres.")]
         public string Descripcion { get; set; } = string.Empty;
 
-        [Range(typeof(decimal), "0", "99999999", ErrorMessage = "La tarifa base debe ser mayor o igual a 0.")]
+        [Range(typeof(decimal), "0", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "La tarifa base debe ser mayor o igual a 0.")]
         public decimal TarifaBase { get; set; }
 
         [Range(1, 1000, ErrorMessage = "El radio de alcance debe estar entre 1 y 1000 km.")]
         public int RadioAlcanceKm { get; set; } = 10;
 
-        [Range(typeof(decimal), "0", "99999999", ErrorMessage = "La meta mensual debe ser mayor o igual a 0.")]
+        [Range(typeof(decimal), "0", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "La meta mensual debe ser mayor o igual a 0.")]
         public decimal GananciaMensualObjetivo { get; set; }
 
-        [Range(typeof(decimal), "0", "99999999", ErrorMessage = "La ganancia actual debe ser mayor o igual a 0.")]
+        [Range(typeof(decimal), "0", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "La ganancia actual debe ser mayor o igual a 0.")]
         public decimal GananciaMensualActual { get; set; }
 
         public bool AceptaTrabajoLejano { get; set; } = true;
 
-        [Range(typeof(decimal), "0", "99999999", ErrorMessage = "El bono por distancia debe ser mayor o igual a 0.")]
+        [Range(typeof(decimal), "0", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "El bono por distancia debe ser mayor o igual a 0.")]
         public decimal BonoPorDistancia { get; set; }
 
         public List<int> RubroIds { get; set; } = new();
@@ -195,7 +209,7 @@ namespace AppServicios.Api.DTOs
         [Range(1, int.MaxValue, ErrorMessage = "Debes indicar un usuario válido.")]
         public int UsuarioId { get; set; }
 
-        [Range(typeof(decimal), "0.01", "99999999", ErrorMessage = "El monto debe ser mayor a 0.")]
+        [Range(typeof(decimal), "0.01", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "El monto debe ser mayor a 0.")]
         public decimal Monto { get; set; } = 2500m;
 
         [Required(ErrorMessage = "La moneda es obligatoria.")]
@@ -279,7 +293,7 @@ namespace AppServicios.Api.DTOs
         [Range(1, int.MaxValue, ErrorMessage = "Debes indicar el usuario que opera el pago.")]
         public int UsuarioOperadorId { get; set; }
 
-        [Range(typeof(decimal), "0.01", "99999999", ErrorMessage = "El monto debe ser mayor a 0.")]
+        [Range(typeof(decimal), "0.01", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "El monto debe ser mayor a 0.")]
         public decimal? Monto { get; set; }
 
         [StringLength(10, MinimumLength = 3, ErrorMessage = "La moneda debe tener entre 3 y 10 caracteres.")]
@@ -402,7 +416,7 @@ namespace AppServicios.Api.DTOs
         [StringLength(1000, MinimumLength = 10, ErrorMessage = "La descripción debe tener entre 10 y 1000 caracteres.")]
         public string Descripcion { get; set; } = string.Empty;
 
-        [Range(typeof(decimal), "0", "99999999", ErrorMessage = "El precio sugerido debe ser mayor o igual a 0.")]
+        [Range(typeof(decimal), "0", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "El precio sugerido debe ser mayor o igual a 0.")]
         public decimal PrecioSugerido { get; set; }
 
         [Required(ErrorMessage = "La unidad es obligatoria.")]
@@ -462,6 +476,10 @@ namespace AppServicios.Api.DTOs
 
     public sealed class SolicitudTrabajoUpsertDto : IValidatableObject
     {
+        // Browser getTimezoneOffset convention; legacy clients use Argentina (UTC-3).
+        [Range(-840, 840)]
+        public int UtcOffsetMinutes { get; set; } = 180;
+
         [Range(1, int.MaxValue, ErrorMessage = "Debes indicar el usuario que opera la solicitud.")]
         public int UsuarioOperadorId { get; set; }
 
@@ -490,23 +508,23 @@ namespace AppServicios.Api.DTOs
         [Required(ErrorMessage = "La fecha requerida es obligatoria.")]
         public DateTime FechaRequerida { get; set; }
 
-        [Range(typeof(decimal), "0.01", "99999999", ErrorMessage = "El presupuesto estimado debe ser mayor a 0.")]
+        [Range(typeof(decimal), "0.01", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "El presupuesto estimado debe ser mayor a 0.")]
         public decimal PresupuestoEstimado { get; set; }
 
-        [Range(typeof(decimal), "0", "99999999", ErrorMessage = "El presupuesto final debe ser mayor o igual a 0.")]
+        [Range(typeof(decimal), "0", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "El presupuesto final debe ser mayor o igual a 0.")]
         public decimal? PresupuestoFinal { get; set; }
 
         [Required(ErrorMessage = "El estado es obligatorio.")]
         [RegularExpression("^(Pendiente|Aceptado|Rechazado|Completado|Cancelado)$", ErrorMessage = "El estado no es válido.")]
         public string Estado { get; set; } = "Pendiente";
 
-        [Range(typeof(decimal), "0", "99999999", ErrorMessage = "La distancia debe ser mayor o igual a 0.")]
+        [Range(typeof(decimal), "0", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "La distancia debe ser mayor o igual a 0.")]
         public decimal? DistanciaKm { get; set; }
 
-        [Range(typeof(decimal), "0", "99999999", ErrorMessage = "El costo de traslado debe ser mayor o igual a 0.")]
+        [Range(typeof(decimal), "0", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "El costo de traslado debe ser mayor o igual a 0.")]
         public decimal? CostoTraslado { get; set; }
 
-        [Range(typeof(decimal), "0", "99999999", ErrorMessage = "El incentivo debe ser mayor o igual a 0.")]
+        [Range(typeof(decimal), "0", "99999999", ParseLimitsInInvariantCulture = true, ErrorMessage = "El incentivo debe ser mayor o igual a 0.")]
         public decimal? Incentivo { get; set; }
 
         public DateTime? FechaAceptacion { get; set; }
@@ -526,13 +544,6 @@ namespace AppServicios.Api.DTOs
 
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
-            if (FechaRequerida.Date < DateTime.UtcNow.Date)
-            {
-                yield return new ValidationResult(
-                    "La fecha requerida no puede ser anterior a hoy.",
-                    new[] { nameof(FechaRequerida) });
-            }
-
             if (ProfesionalId.HasValue && ProfesionalId.Value <= 0)
             {
                 yield return new ValidationResult(
