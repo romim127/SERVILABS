@@ -236,6 +236,7 @@ namespace AppServicios.Api.Data
 
             // Seed datos iniciales
             modelBuilder.Entity<Rubro>().HasData(
+                new Rubro { Id = 17, Nombre = "Gas", Descripcion = "Instalaciones y mantenimiento de gas", Icono = "gas", Activo = true },
                 new Rubro { Id = 1, Nombre = "Electricidad", Descripcion = "Servicios eléctricos", Icono = "electricidad", Activo = true },
                 new Rubro { Id = 2, Nombre = "Plomería", Descripcion = "Servicios de plomería", Icono = "plomeria", Activo = true },
                 new Rubro { Id = 3, Nombre = "Cuidados de Niños", Descripcion = "Niñeras y cuidadores", Icono = "cuidados-ninos", Activo = true },
@@ -255,6 +256,7 @@ namespace AppServicios.Api.Data
             );
 
             modelBuilder.Entity<Servicio>().HasData(
+                new Servicio { Id = 69, RubroId = 17, Nombre = "Gasista", Descripcion = "Instalación, revisión y mantenimiento de instalaciones y artefactos a gas.", PrecioSugerido = 0m, Unidad = "a convenir", Activo = true },
                 new Servicio { Id = 1, RubroId = 1, Nombre = "Instalación eléctrica domiciliaria", Descripcion = "Instalaciones, ampliaciones y mejoras eléctricas para viviendas.", PrecioSugerido = 35000m, Unidad = "por trabajo", Activo = true },
                 new Servicio { Id = 2, RubroId = 1, Nombre = "Reparación de cortocircuitos", Descripcion = "Diagnóstico y reparación de fallas eléctricas urgentes.", PrecioSugerido = 30000m, Unidad = "por visita", Activo = true },
                 new Servicio { Id = 3, RubroId = 1, Nombre = "Tableros y térmicas", Descripcion = "Armado, reemplazo y revisión de tableros eléctricos.", PrecioSugerido = 45000m, Unidad = "por trabajo", Activo = true },

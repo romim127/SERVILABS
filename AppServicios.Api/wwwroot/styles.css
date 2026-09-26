@@ -2602,3 +2602,16 @@ body::selection {
     max-width: 100%;
   }
 }
+
+/* Compact navigation and account settings on mobile. */
+.account-section { padding: 1.2rem; margin-top: 1.2rem; }
+.display-preferences { margin-top: 1rem; }
+.display-preferences summary { cursor: pointer; padding: .75rem; }
+.display-preferences .theme-switch, .display-preferences .currency-switch { margin-top: .75rem; }
+#requestServiceSelect { width: 100%; min-width: 0; }
+@media (max-width: 640px) {
+  .topbar { padding: .8rem; gap: .65rem; }
+  .nav-links { display: flex; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; width: 100%; gap: 1rem; padding: .4rem 0; }
+  .nav-links a { white-space: nowrap; font-size: .9rem; }
+  .section-heading h2 { font-size: 1.45rem; }
+}

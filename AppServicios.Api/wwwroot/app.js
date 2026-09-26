@@ -429,6 +429,7 @@ function updateNavigationForShell(roleKey, mode) {
 function setVisibleAppSections(mode = 'session') {
   const roleKey = getSessionRoleKey();
   const sections = [
+    'cuenta',
     'home-hero',
     'paneles',
     'experiencia-app',
@@ -449,8 +450,7 @@ function setVisibleAppSections(mode = 'session') {
     visible.add('acceso');
     visible.add('guia-roles');
   } else if (mode === 'session') {
-    visible.add('acceso');
-    visible.add('guia-roles');
+    visible.add('cuenta');
     visible.add('mapa-vivo');
     visible.add('billetera');
     visible.add('chat-solicitud');
@@ -2178,7 +2178,7 @@ function renderMapLegend(items) {
     mapLegendList.innerHTML = `
       <div class="request-item">
         <strong>Sin ubicaciones listas</strong>
-        <small>Carga clientes, profesionales o solicitudes con ubicación para verlos aquí.</small>
+        <small>Todavía no hay perfiles o solicitudes con ubicación que coincidan con estos filtros.</small>
       </div>`;
     return;
   }
@@ -2414,7 +2414,7 @@ async function renderServiceMap() {
   }
 
   if (visibleItems.length === 0) {
-    mapStatus.textContent = radiusKm > 0 ? 'Sin resultados cercanos' : 'Sin coordenadas válidas';
+    mapStatus.textContent = currentDeviceLocation ? 'Tu ubicación está lista · Sin resultados cercanos' : 'Sin resultados con ubicación';
 
     if (mapSummary) {
       mapSummary.textContent = radiusKm > 0 && currentDeviceLocation
@@ -4651,21 +4651,38 @@ async function loadRequests() {
   }
 }
 
-function fillRequestSelectors() {
-  if (requestServiceSelect) {
-    requestServiceSelect.innerHTML = '';
+function renderServiceOptions() {
+  if (!requestServiceSelect) return;
+  const previous = requestServiceSelect.value;
+  const query = normalizeText(document.getElementById('requestServiceSearch')?.value || '');
+  const aliases = {
+    plomeria: 'plomero plomera fontanero fontaneria sanitario',
+    gas: 'gasista gasistas gas matriculado',
+    electricidad: 'electricista electricistas',
+    'cuidados de ninos': 'ninera ninero cuidado infantil',
+    enfermeria: 'enfermero enfermera',
+    mecanica: 'mecanico mecanica',
+    'construccion y servicios generales': 'albanil pintor pintura carpintero limpieza'
+  };
+  const services = cachedServicios.filter((item) => item.activo !== false).filter((item) => {
+    const category = normalizeText(item.rubroNombre || cachedRubros.find((r) => r.id === item.rubroId)?.nombre);
+    const words = normalizeText([item.nombre, category, item.descripcion, aliases[category] || ''].join(' '));
+    return query.split(/\s+/).every((word) => words.includes(word));
+  }).sort((a, b) => (a.rubroNombre + ' ' + a.nombre).localeCompare(b.rubroNombre + ' ' + b.nombre, 'es'));
+  requestServiceSelect.replaceChildren(new Option(services.length ? 'Seleccioná un servicio' : 'Sin coincidencias', ''));
+  services.forEach((item) => {
+    const category = item.rubroNombre || cachedRubros.find((r) => r.id === item.rubroId)?.nombre || 'Servicios';
+    requestServiceSelect.add(new Option(category + ' · ' + item.nombre, String(item.id)));
+  });
+  if (services.some((item) => String(item.id) === previous)) requestServiceSelect.value = previous;
+  const feedback = document.getElementById('serviceSearchFeedback');
+  if (feedback) feedback.textContent = services.length
+    ? services.length + ' servicios disponibles. Elegí uno de la lista.'
+    : 'No encontramos ese oficio. Probá con otro nombre o borrá la búsqueda para ver todos.';
+}
 
-    if (cachedServicios.length === 0) {
-      requestServiceSelect.innerHTML = '<option value="">No hay servicios disponibles</option>';
-    } else {
-      cachedServicios.forEach((servicio) => {
-        const option = document.createElement('option');
-        option.value = String(servicio.id);
-        option.textContent = servicio.nombre;
-        requestServiceSelect.appendChild(option);
-      });
-    }
-  }
+function fillRequestSelectors() {
+  renderServiceOptions();
 
   if (requestClientSelect) {
     requestClientSelect.innerHTML = '';
@@ -5145,6 +5162,26 @@ if (chatRequestSelect) {
 if (chatSendButton) {
   chatSendButton.addEventListener('click', sendChatMessage);
 }
+
+// Keep account controls available without repeating the access form after login.
+const accountSection = document.getElementById('cuenta');
+const accountCard = document.getElementById('accountSessionCard');
+if (accountSection && accountCard) accountSection.append(accountCard);
+const appMain = document.getElementById('inicio');
+if (appMain) {
+  ['dashboard-profesional', 'dashboard-cliente'].forEach((id) => {
+    const panel = document.getElementById(id);
+    if (panel) appMain.prepend(panel);
+  });
+}
+const preferences = document.createElement('details');
+preferences.className = 'display-preferences';
+const preferencesTitle = document.createElement('summary');
+preferencesTitle.textContent = 'Apariencia y moneda';
+preferences.append(preferencesTitle);
+document.querySelectorAll('#mainAppHeader .theme-switch, #mainAppHeader .currency-switch').forEach((element) => preferences.append(element));
+if (accountSection) accountSection.append(preferences);
+document.getElementById('requestServiceSearch')?.addEventListener('input', renderServiceOptions);
 
 setActiveRole('cliente');
 setActiveAuthTab('login');

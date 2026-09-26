@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="/icon-192.svg?v=11" />
   <link rel="manifest" href="/manifest.webmanifest?v=11" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <link rel="stylesheet" href="/styles.css?v=20" />
+  <link rel="stylesheet" href="/styles.css?v=21" />
 </head>
 <body>
     <!-- ASISTENTE IA FLOTANTE -->
@@ -137,9 +137,9 @@
     </a>
 
     <nav class="nav-links" aria-label="Navegación principal">
-      <a href="#acceso">Acceso</a>
-      <a href="#guia-roles">Guía</a>
-      <a href="#dashboard-cliente" data-nav-role="cliente admin">Cliente</a>
+      <a href="#cuenta" data-nav-role="cliente profesional admin">Mi cuenta</a>
+
+      <a href="#dashboard-cliente" data-nav-role="cliente admin">Mis solicitudes</a>
       <a href="#dashboard-profesional" data-nav-role="profesional admin">Profesional</a>
       <a href="#mapa-vivo">Mapa</a>
       <a href="#billetera">Billetera</a>
@@ -653,7 +653,7 @@
             <div class="advantage-item"><span>🎯</span><div><strong>Diseño con intención</strong><small>neón legible en oscuro y máxima claridad en modo claro</small></div></div>
           </div>
 
-          <div class="session-card glass-panel">
+          <div class="session-card glass-panel" id="accountSessionCard">
             <div class="session-card-head">
               <strong>Tu sesión actual</strong>
               <button type="button" class="btn btn-secondary btn-small session-action is-hidden" id="logoutButton">Cerrar sesión</button>
@@ -724,7 +724,7 @@
       <div class="section-heading">
         <div>
           <p class="eyebrow">Mapa en vivo</p>
-          <h2>Ubica clientes, profesionales y solicitudes sobre el mapa</h2>
+          <h2>Explorá servicios cerca tuyo</h2>
         </div>
         <span class="pill" id="mapStatus">Preparando mapa...</span>
       </div>
@@ -814,14 +814,14 @@
     <section class="client-dashboard glass-panel" id="dashboard-cliente">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Dashboard cliente en vivo</p>
-          <h2>Publica solicitudes reales y monitorea su estado</h2>
+          <p class="eyebrow">Mis solicitudes</p>
+          <h2>¿Qué servicio necesitás?</h2>
         </div>
         <span class="pill" id="requestState">Listo para publicar</span>
       </div>
 
       <p class="section-text">
-        Este bloque ya trabaja con endpoints reales. Puedes crear una solicitud y verla inmediatamente en el historial.
+        Buscá un oficio, elegí el servicio y contanos qué necesitás. Tus solicitudes aparecerán debajo.
       </p>
 
       <div class="request-grid">
@@ -834,7 +834,12 @@
           </label>
 
           <label class="form-field">
-            <span>Servicio</span>
+            <span>Buscar oficio o servicio</span>
+            <input id="requestServiceSearch" class="text-input" type="search" placeholder="Ej.: plomero, gasista, electricista" autocomplete="off" aria-controls="requestServiceSelect" />
+          </label>
+          <p id="serviceSearchFeedback" class="mini-note" role="status" aria-live="polite"></p>
+          <label class="form-field">
+            <span>Elegí el servicio</span>
             <select id="requestServiceSelect">
               <option value="">Cargando servicios...</option>
             </select>
@@ -1320,6 +1325,7 @@
         <p>Presupuestos, estados, progreso y reputación desde un tablero moderno, adaptable y legible.</p>
       </article>
     </section>
+    <section id="cuenta" class="glass-panel account-section" hidden><h2>Mi cuenta</h2></section>
   </main>
 
   <footer class="footer" id="mainAppFooter" style="display:none;">
@@ -1332,7 +1338,7 @@
   <div class="toast-host" id="notificationToastHost" aria-live="polite" aria-atomic="true"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="/app.js?v=20"></script>
+  <script src="/app.js?v=21"></script>
   <script src="/ai-assistant-drag.js"></script>
 </body>
 </html>
