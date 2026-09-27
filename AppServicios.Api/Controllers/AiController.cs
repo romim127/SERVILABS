@@ -265,6 +265,7 @@ namespace AppServicios.Api.Controllers
                 Ayudala a pasar de "la cosa del cosito" a una solicitud clara para SERVILABS.
                 Si no hay suficiente informacion, aclara que es una orientacion probable.
                 No afirmes marcas, piezas exactas ni materiales si no son evidentes.
+                Conserva el artefacto indicado: una cocina no es un calefon. Si cocina puede ser el ambiente o el artefacto, pide aclaracion. No deduzcas gas solamente por olor ni por palabras como gastronomia. Si texto e imagen no coinciden, pregunta antes de sugerir un servicio.
                 """;
         }
 
@@ -314,10 +315,12 @@ namespace AppServicios.Api.Controllers
             var suggestedService = "Revision tecnica";
             var safetyNote = "La sugerencia de ASI es orientativa y no reemplaza la evaluacion profesional.";
 
-            if (normalized.Contains("gas") || normalized.Contains("calefon") || normalized.Contains("calefón") || normalized.Contains("olor"))
+            if (System.Text.RegularExpressions.Regex.IsMatch(normalized, @"\b(gas|gasista|calef[oó]n|caldera)\b") && !normalized.Contains("eléctric") && !normalized.Contains("electric"))
             {
-                suggestedTrade = "Gasista matriculado o plomero";
-                suggestedService = "Revision de calefon, conexion o posible perdida";
+                suggestedTrade = "Gasista matriculado";
+                suggestedService = normalized.Contains("cocina") ? "Revisión de cocina a gas"
+                    : normalized.Contains("calefon") || normalized.Contains("calefón") ? "Revisión de calefón"
+                    : normalized.Contains("caldera") ? "Revisión de caldera" : "Revisión de instalación de gas";
                 safetyNote = "Si hay olor a gas, ventila el ambiente, evita encender luces o artefactos y contacta a un gasista matriculado o emergencias.";
             }
             else if (normalized.Contains("cable") || normalized.Contains("enchufe") || normalized.Contains("luz") || normalized.Contains("chispa") || normalized.Contains("electric"))
@@ -331,6 +334,15 @@ namespace AppServicios.Api.Controllers
                 suggestedTrade = "Plomero";
                 suggestedService = "Revision de perdida o cañeria";
                 safetyNote = "Si la perdida es grande, intenta cerrar la llave de paso y aleja artefactos electricos.";
+            }
+
+            if (suggestedTrade == "Profesional del rubro adecuado")
+            {
+                return new AiCositoResponseDto(
+                    string.IsNullOrWhiteSpace(description)
+                        ? "No pude analizar la imagen. Describí el objeto y qué problema tiene."
+                        : "Necesito un detalle más: ¿qué objeto tiene el problema? Si es una cocina, ¿hablás del ambiente o del artefacto? Indicá si funciona con gas o electricidad cuando corresponda.",
+                    suggestedTrade, "Falta información", "", safetyNote, false, source);
             }
 
             var post = $"Necesito {suggestedTrade.ToLowerInvariant()} para {suggestedService.ToLowerInvariant()}. ";

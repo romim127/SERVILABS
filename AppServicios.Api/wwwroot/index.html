@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="/icon-192.svg?v=11" />
   <link rel="manifest" href="/manifest.webmanifest?v=11" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <link rel="stylesheet" href="/styles.css?v=21" />
+  <link rel="stylesheet" href="/styles.css?v=22" />
 </head>
 <body>
     <!-- ASISTENTE IA FLOTANTE -->
@@ -49,7 +49,13 @@
           <div class="cosito-body" id="cositoBody" hidden>
             <p>ASI te ayuda a describir mejor el problema. El profesional confirma el diagnóstico.</p>
             <textarea id="cositoDescription" rows="3" placeholder="Ej: se me rompió el cosito del calefón, veo un caño con pérdida..."></textarea>
-            <input id="cositoPhoto" type="file" accept="image/png,image/jpeg,image/webp" />
+            <div class="cosito-actions">
+              <button type="button" id="cositoCameraButton">Tomar foto</button>
+              <button type="button" id="cositoFileButton">Archivo o galería</button>
+            </div>
+            <input id="cositoPhoto" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+            <input id="cositoCamera" type="file" accept="image/*" capture="environment" hidden />
+            <small id="cositoPhotoStatus" role="status">Sin imagen seleccionada</small>
             <div class="cosito-actions">
               <button type="button" id="cositoAnalyzeButton">Ayudame a explicarlo</button>
               <button type="button" id="cositoApplyButton" hidden>Usar en mi solicitud</button>
@@ -146,6 +152,7 @@
       <a href="#chat-solicitud">Chat</a>
       <a href="#dashboard-coordinacion-real" data-nav-role="admin">Admin</a>
     </nav>
+    <button type="button" id="leaveAppButton" hidden>Salir de la app</button>
 
     <div class="theme-switch" role="group" aria-label="Cambiar tema visual">
       <button type="button" data-theme-choice="light">Claro</button>
@@ -1338,7 +1345,7 @@
   <div class="toast-host" id="notificationToastHost" aria-live="polite" aria-atomic="true"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="/app.js?v=21"></script>
+  <script src="/app.js?v=22"></script>
   <script src="/ai-assistant-drag.js"></script>
 </body>
 </html>

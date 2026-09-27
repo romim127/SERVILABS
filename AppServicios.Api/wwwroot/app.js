@@ -114,6 +114,24 @@ const cositoToggle = document.getElementById('cositoToggle');
 const cositoBody = document.getElementById('cositoBody');
 const cositoDescription = document.getElementById('cositoDescription');
 const cositoPhoto = document.getElementById('cositoPhoto');
+const cositoCamera = document.getElementById('cositoCamera');
+let cositoSelectedPhoto = null;
+document.getElementById('cositoCameraButton')?.addEventListener('click', () => cositoCamera?.click());
+document.getElementById('cositoFileButton')?.addEventListener('click', () => cositoPhoto?.click());
+[cositoPhoto, cositoCamera].forEach(input => input?.addEventListener('change', () => {
+  const file = input.files?.[0];
+  if (!file) return;
+  const status = document.getElementById('cositoPhotoStatus');
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 4000000) {
+    input.value = '';
+    if (status) status.textContent = 'Elegí una imagen JPG, PNG o WEBP de hasta 4 MB.';
+    return;
+  }
+  cositoSelectedPhoto = file;
+  latestCositoSuggestion = null;
+  if (cositoApplyButton) cositoApplyButton.hidden = true;
+  if (status) status.textContent = `Imagen seleccionada: ${file.name}`;
+}));
 const cositoAnalyzeButton = document.getElementById('cositoAnalyzeButton');
 const cositoApplyButton = document.getElementById('cositoApplyButton');
 const cositoResult = document.getElementById('cositoResult');
@@ -193,7 +211,7 @@ function renderCositoResult(payload) {
 }
 
 function selectServiceByCositoSuggestion(payload) {
-  const target = normalizeForMatch(`${payload.suggestedTrade || ''} ${payload.suggestedService || ''} ${payload.suggestedPost || ''}`);
+  const target = normalizeForMatch(`${payload.suggestedTrade || ''}`);
   const keywords = [
     ['gasista', ['gas', 'calefon', 'caldera']],
     ['plomeria', ['plom', 'agua', 'cano', 'caneria', 'perdida']],
@@ -220,7 +238,7 @@ function selectServiceByCositoSuggestion(payload) {
 
 async function analyzeCosito() {
   const description = cositoDescription?.value.trim() || '';
-  const photo = cositoPhoto?.files?.[0] || null;
+  const photo = cositoSelectedPhoto;
   if (!description && !photo) {
     if (cositoResult) cositoResult.textContent = 'Escribí qué ves o adjuntá una foto para que ASI pueda orientarte.';
     return;
@@ -5297,3 +5315,16 @@ restoreSavedSession().finally(() => {
   startCoordinationPolling();
   loadHomeData();
 });
+
+// Return to Android's home screen without discarding the authenticated session.
+const leaveAppButton = document.getElementById('leaveAppButton');
+if (leaveAppButton && window.Capacitor?.getPlatform?.() === 'android' && window.Capacitor?.isPluginAvailable?.('App')) {
+  leaveAppButton.hidden = false;
+  leaveAppButton.addEventListener('click', async () => {
+    try {
+      await window.Capacitor.Plugins.App.minimizeApp();
+    } catch (error) {
+      window.alert('No se pudo salir. Podés usar el botón Inicio de Android.');
+    }
+  });
+}

@@ -66,6 +66,13 @@ def run():
             except (OSError, urllib.error.URLError): pass
             time.sleep(.2)
         else: raise AssertionError('Local API did not start: ' + (temp / 'api.log').read_text()[-3000:])
+        for description, expected in [('Mi cocina a gas no enciende', 'cocina'), ('El calefón no enciende', 'calefón'), ('La caldera a gas falla', 'caldera'), ('Hay olor en la cocina', None), ('Busco gastronomía', None)]:
+            boundary = 'servilabs-test-boundary'
+            body = (f'--{boundary}\r\nContent-Disposition: form-data; name="description"\r\n\r\n{description}\r\n--{boundary}--\r\n').encode()
+            req = urllib.request.Request(base + '/api/Ai/cosa-del-cosito', data=body, headers={'Content-Type': 'multipart/form-data; boundary=' + boundary})
+            with urllib.request.urlopen(req) as response:
+                suggestion = json.load(response)
+            check(expected in suggestion['suggestedService'].lower() if expected else not suggestion['suggestedPost'], 'ASI preserves appliance or asks for clarification: ' + description + ' => ' + str(suggestion))
         def payload(email='test@example.test', dni='90000001'):
             return {'usuario': {'nombre': 'Cliente Prueba', 'email': email, 'telefono': '1122334455', 'dni': dni, 'fechaNacimiento': '1990-01-01T00:00:00Z', 'rol': 'Cliente', 'passwordHash': ' Test-password-123 ', 'activo': True}, 'ubicacion': 'CABA Argentina', 'latitud': -34.6, 'longitud': -58.4, 'preferencias': ''}
         data = payload()

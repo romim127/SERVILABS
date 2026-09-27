@@ -1,9 +1,9 @@
-const CACHE_NAME = 'appservicios-shell-v21';
+const CACHE_NAME = 'appservicios-shell-v22';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=21',
-  '/app.js?v=21',
+  '/styles.css?v=22',
+  '/app.js?v=22',
   '/logo.svg',
   '/logo.svg?v=11',
   '/favicon.svg',
