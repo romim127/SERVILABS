@@ -16,9 +16,12 @@ namespace AppServicios.Api.Controllers
     {
         private readonly AppServiciosDbContext _context;
 
-        public MensajesSolicitudController(AppServiciosDbContext context)
+        private readonly Services.PushNotificationService _pushService;
+
+        public MensajesSolicitudController(AppServiciosDbContext context, Services.PushNotificationService pushService)
         {
             _context = context;
+            _pushService = pushService;
         }
 
         [HttpGet("solicitud/{solicitudId:int}")]
@@ -196,6 +199,8 @@ namespace AppServicios.Api.Controllers
             });
 
             await _context.SaveChangesAsync();
+            await _pushService.SendToUserAsync(_context, recipient.Id, "Nuevo mensaje en tu solicitud",
+                $"Tenés un mensaje nuevo sobre {serviceName}.", "/#chat-solicitud");
         }
 
         private static MensajeSolicitudDto ToDto(MensajeSolicitud item) => new(

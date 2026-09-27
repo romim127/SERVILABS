@@ -19,3 +19,7 @@ android/*.keystore
 # iOS build outputs
 ios/App/build/
 ios/DerivedData/
+
+# Firebase server credentials must never be committed
+**/*firebase-admin*.json
+**/*firebase-adminsdk*.json

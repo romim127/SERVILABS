@@ -68,13 +68,6 @@ namespace AppServicios.Api.Controllers
             item.Leida = true;
             await _context.SaveChangesAsync();
 
-            // Enviar push al usuario cuando marca como leída
-            var sub = await _context.PushSubscriptions.FirstOrDefaultAsync(s => s.UsuarioId == item.UsuarioId);
-            if (sub != null)
-            {
-                await _pushService.SendAsync(sub, "Notificación leída", $"Has marcado como leída: {item.Titulo}");
-            }
-
             return Ok(ToDto(item));
         }
 

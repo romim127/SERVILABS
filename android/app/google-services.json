@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "223082656917",
+    "project_id": "servilabs-fe09a",
+    "storage_bucket": "servilabs-fe09a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:223082656917:android:e1fa6e9b4f5e924e93179c",
+        "android_client_info": {
+          "package_name": "com.appservicios.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD7C70hM1cxTExowtRFNkIcut-UUHnjMbQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

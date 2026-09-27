@@ -94,7 +94,19 @@ def run():
         check(status == 201, 'Legacy interrupted signup fixture created')
         status, resumed = api('/api/Auth/register-client', partial)
         check(status == 200 and resumed['usuarioId'] == user['id'] and resumed['clienteId'], 'Interrupted legacy registration completes safely')
+        device = {'token': 'test-native-device-token-1234567890'}
+        check(api('/api/Push/native-token', device)[0] == 401, 'Native registration requires authentication')
+        check(api('/api/Push/native-token', {'token': 'bad'}, token=token)[0] == 400, 'Invalid native token rejected')
+        check(api('/api/Push/native-status', token=token)[1]['configured'] is False, 'Missing Firebase server credential is reported honestly')
+        check(api('/api/Push/native-token', device, token=token)[0] == 200, 'Client registers a native device')
+        check(api('/api/Push/native-token', device, token=token)[0] == 200, 'Native registration is idempotent')
+        check(api('/api/Push/native-token', device, token=resumed['accessToken'])[0] == 200, 'Device can follow the currently signed-in account')
+        check(api('/api/Push/native-unsubscribe', device, token=token)[0] == 200, 'Previous account unsubscribe cannot remove the new owner')
         with psycopg.connect(host='127.0.0.1', port=dbport, dbname='postgres', user='postgres', autocommit=True) as db:
+            owners = db.execute('SELECT "UsuarioId" FROM "PushSubscriptions" WHERE "Endpoint" = %s', ('fcm:' + device['token'],)).fetchall()
+            check(owners == [(resumed['usuarioId'],)], 'Only the current account owns the device subscription')
+            check(api('/api/Push/native-unsubscribe', device, token=resumed['accessToken'])[0] == 200, 'Owner can disable native notifications on logout')
+            check(db.execute('SELECT count(*) FROM "PushSubscriptions" WHERE "Endpoint" = %s', ('fcm:' + device['token'],)).fetchone()[0] == 0, 'Logout removes the native subscription')
             db.execute("CREATE FUNCTION reject_test_client() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.\"Ubicacion\" = 'FORCE_ROLLBACK' THEN RAISE EXCEPTION 'test failure'; END IF; RETURN NEW; END $$")
             db.execute('CREATE TRIGGER reject_test_client BEFORE INSERT ON "Clientes" FOR EACH ROW EXECUTE FUNCTION reject_test_client()')
             rollback = payload('rollback@example.test', '90000003'); rollback['ubicacion'] = 'FORCE_ROLLBACK'

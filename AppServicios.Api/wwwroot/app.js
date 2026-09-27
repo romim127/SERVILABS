@@ -28,7 +28,83 @@ if (currencySelect) {
 // --- INTEGRACIÓN FLUJO ONBOARDING: mostrar app tras login/registro exitoso ---
 // --- ASISTENTE IA FLOTANTE ---
 // --- NOTIFICACIONES PUSH ---
+const NATIVE_PUSH_TOKEN_KEY = 'servilabs-native-push-token';
+let nativePushListenersReady = false;
+let nativePushRegistering = false;
+let nativePushSigningOut = false;
+function nativePushPlugin() {
+  return window.Capacitor?.getPlatform?.() === 'android' && window.Capacitor?.isPluginAvailable?.('PushNotifications')
+    ? window.Capacitor.Plugins.PushNotifications : null;
+}
+function pushStatus(message) {
+  const el = document.getElementById('pushPermissionStatus');
+  if (el) el.textContent = message;
+}
+async function saveNativePushToken(token) {
+  if (!currentSession?.usuarioId || nativePushSigningOut) return;
+  localStorage.setItem(NATIVE_PUSH_TOKEN_KEY, token);
+  const response = await fetch('/api/Push/native-token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token })
+  });
+  if (!response.ok) throw new Error('No se pudo registrar el teléfono. Tocá Activar notificaciones para reintentar.');
+  const status = await fetch('/api/Push/native-status');
+  const config = status.ok ? await status.json() : {};
+  pushStatus(config.configured ? 'Notificaciones activadas en este teléfono.' : 'Teléfono registrado. Falta habilitar el envío desde el servidor.');
+}
+async function subscribeToNativePush(requestPermission = false) {
+  const push = nativePushPlugin();
+  if (!push || !currentSession?.usuarioId || nativePushRegistering) return;
+  nativePushRegistering = true;
+  try {
+    if (!nativePushListenersReady) {
+      await push.addListener('registration', ({ value }) => {
+        saveNativePushToken(value).catch(error => pushStatus(error.message));
+      });
+      await push.addListener('registrationError', () => pushStatus('No se pudo activar Firebase. Tocá Activar notificaciones para reintentar.'));
+      await push.addListener('pushNotificationReceived', () => loadNotifications());
+      await push.addListener('pushNotificationActionPerformed', ({ notification }) => {
+        if (!currentSession) return;
+        const target = notification.data?.url;
+        if (['/#chat-solicitud', '/#dashboard-cliente', '/#dashboard-profesional', '/#cuenta'].includes(target)) {
+          document.querySelector(target.substring(1))?.scrollIntoView({ behavior: 'smooth' });
+        }
+        loadNotifications();
+      });
+      nativePushListenersReady = true;
+    }
+    let permission = await push.checkPermissions();
+    if (requestPermission && permission.receive !== 'granted') permission = await push.requestPermissions();
+    if (permission.receive !== 'granted') {
+      pushStatus(permission.receive === 'denied'
+        ? 'Notificaciones desactivadas. Habilitalas en Ajustes de Android → Aplicaciones → SERVILABS → Notificaciones.'
+        : 'Tocá Activar notificaciones para recibir avisos aunque salgas de la app.');
+      return;
+    }
+    await push.createChannel({ id: 'servilabs_updates', name: 'Trabajos y mensajes', importance: 4, sound: 'default', vibration: true });
+    await push.register();
+  } finally { nativePushRegistering = false; }
+}
+async function disableNativePush() {
+  const token = localStorage.getItem(NATIVE_PUSH_TOKEN_KEY);
+  const push = nativePushPlugin();
+  if (token && currentSession) {
+    try {
+      await fetch('/api/Push/native-unsubscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }), signal: AbortSignal.timeout(5000)
+      });
+    } catch { /* Unregister the device token below even when offline. */ }
+  }
+  if (push) await push.unregister();
+  localStorage.removeItem(NATIVE_PUSH_TOKEN_KEY);
+}
 async function subscribeToPushNotifications() {
+  if (nativePushPlugin()) return subscribeToNativePush();
+  if (window.Capacitor?.getPlatform?.() === 'android') {
+    pushStatus('Actualizá SERVILABS para habilitar las notificaciones de Android.');
+    return;
+  }
+
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   const reg = await navigator.serviceWorker.ready;
   let permission = Notification.permission;
@@ -2648,7 +2724,13 @@ function saveSession(session) {
   });
 }
 
-function clearSession() {
+async function clearSession() {
+  nativePushSigningOut = true;
+  try { await disableNativePush(); } catch {
+    nativePushSigningOut = false;
+    pushStatus('No se pudo desactivar el dispositivo. Revisá tu conexión e intentá cerrar sesión de nuevo.');
+    return;
+  }
   currentSession = null;
   currentShellMode = 'wizard';
   locationPromptRequestedForSession = false;
@@ -2656,6 +2738,7 @@ function clearSession() {
   shownNotificationIds.clear();
   stopNotificationPolling();
   localStorage.removeItem(SESSION_KEY);
+  nativePushSigningOut = false;
   applySessionUI();
   loadNotifications();
   resetWalletUi();
@@ -2676,7 +2759,7 @@ async function restoreSavedSession() {
   try {
     const saved = JSON.parse(raw);
     if (!saved?.usuarioId || !saved.accessToken || (saved.accessTokenExpiresAt && Date.parse(saved.accessTokenExpiresAt) <= Date.now())) {
-      clearSession();
+      await clearSession();
       return;
     }
 
@@ -2697,7 +2780,7 @@ async function restoreSavedSession() {
     await Promise.all([loadRequests(), loadProfessionalDashboard(), loadNotifications(), loadWallet(), loadCoordinationDashboard()]);
   } catch (error) {
     console.error(error);
-    clearSession();
+    await clearSession();
   }
 }
 
@@ -5328,3 +5411,13 @@ if (leaveAppButton && window.Capacitor?.getPlatform?.() === 'android' && window.
     }
   });
 }
+
+document.getElementById('enablePushButton')?.addEventListener('click', async () => {
+  const button = document.getElementById('enablePushButton');
+  button.disabled = true;
+  try {
+    if (nativePushPlugin()) await subscribeToNativePush(true);
+    else await subscribeToPushNotifications();
+  } catch { pushStatus('No se pudieron activar las notificaciones. Revisá la conexión y volvé a intentar.'); }
+  finally { button.disabled = false; }
+});

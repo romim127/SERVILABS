@@ -1502,6 +1502,7 @@ namespace AppServicios.Api.Controllers
             });
 
             await _context.SaveChangesAsync();
+            await _pushService.SendToUserAsync(_context, solicitud.Cliente.UsuarioId, titulo, mensaje, "/#dashboard-cliente");
         }
 
         private static SolicitudTrabajoDto ToDto(SolicitudTrabajo solicitud) => new(
