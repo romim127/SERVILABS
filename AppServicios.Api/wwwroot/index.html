@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="/icon-192.svg?v=11" />
   <link rel="manifest" href="/manifest.webmanifest?v=11" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <link rel="stylesheet" href="/styles.css?v=24" />
+  <link rel="stylesheet" href="/styles.css?v=25" />
 </head>
 <body>
     <!-- ASISTENTE IA FLOTANTE -->
@@ -143,7 +143,7 @@
     </a>
 
     <nav class="nav-links" aria-label="Navegación principal">
-      <a href="#cuenta" data-nav-role="cliente profesional admin">Mi cuenta</a>
+      <button type="button" id="openAccountButton" data-nav-role="cliente profesional admin" aria-haspopup="dialog" aria-controls="cuenta">Mi cuenta</button>
 
       <a href="#dashboard-cliente" data-nav-role="cliente admin">Mis solicitudes</a>
       <a href="#dashboard-profesional" data-nav-role="profesional admin">Profesional</a>
@@ -1332,19 +1332,17 @@
         <p>Presupuestos, estados, progreso y reputación desde un tablero moderno, adaptable y legible.</p>
       </article>
     </section>
-    <section id="cuenta" class="glass-panel account-section" hidden>
-      <h2>Mi cuenta</h2>
+    <dialog id="cuenta" class="glass-panel account-section" aria-labelledby="accountTitle">
+      <div class="account-dialog-head"><h2 id="accountTitle">Mi cuenta</h2><button type="button" id="backFromAccountButton" class="btn btn-secondary btn-small">Volver</button></div>
       <details class="account-options" id="accountOptions">
         <summary>Opciones de la cuenta</summary>
         <div class="account-options-content">
           <strong>Avisos en este dispositivo</strong>
           <p id="pushPermissionStatus" role="status">Los permisos de notificaciones se solicitan al ingresar.</p>
           <button type="button" class="btn btn-secondary btn-small" id="enablePushButton" hidden>Revisar notificaciones</button>
-          <button type="button" class="btn btn-secondary btn-small" id="leaveAppButton" hidden>Cerrar aplicación</button>
-          <small id="leaveAppHint" hidden>Tu sesión se conserva para el próximo ingreso.</small>
         </div>
       </details>
-    </section>
+    </dialog>
   </main>
 
   <footer class="footer" id="mainAppFooter" style="display:none;">
@@ -1357,7 +1355,7 @@
   <div class="toast-host" id="notificationToastHost" aria-live="polite" aria-atomic="true"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="/app.js?v=24"></script>
+  <script src="/app.js?v=25"></script>
   <script src="/ai-assistant-drag.js"></script>
 </body>
 </html>

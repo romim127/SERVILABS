@@ -67,7 +67,8 @@ async function subscribeToNativePush(requestPermission = false) {
         if (!currentSession) return;
         const target = notification.data?.url;
         if (['/#chat-solicitud', '/#dashboard-cliente', '/#dashboard-profesional', '/#cuenta'].includes(target)) {
-          document.querySelector(target.substring(1))?.scrollIntoView({ behavior: 'smooth' });
+          if (target === '/#cuenta') openAccountPanel();
+          else document.querySelector(target.substring(1))?.scrollIntoView({ behavior: 'smooth' });
         }
         loadNotifications();
       });
@@ -530,7 +531,6 @@ function updateNavigationForShell(roleKey, mode) {
 function setVisibleAppSections(mode = 'session') {
   const roleKey = getSessionRoleKey();
   const sections = [
-    'cuenta',
     'home-hero',
     'paneles',
     'experiencia-app',
@@ -551,7 +551,6 @@ function setVisibleAppSections(mode = 'session') {
     visible.add('acceso');
     visible.add('guia-roles');
   } else if (mode === 'session') {
-    visible.add('cuenta');
     visible.add('mapa-vivo');
     visible.add('billetera');
     visible.add('chat-solicitud');
@@ -2738,6 +2737,8 @@ async function clearSession() {
     pushStatus('No se pudo desactivar el dispositivo. Revisá tu conexión e intentá cerrar sesión de nuevo.');
     return;
   }
+  document.getElementById('cuenta')?.close();
+  setWizardStep('login');
   currentSession = null;
   currentShellMode = 'wizard';
   locationPromptRequestedForSession = false;
@@ -2747,6 +2748,9 @@ async function clearSession() {
   localStorage.removeItem(SESSION_KEY);
   nativePushSigningOut = false;
   applySessionUI();
+  history.replaceState(null, '', location.pathname + location.search);
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  document.getElementById('wizardEmail')?.focus({ preventScroll: true });
   loadNotifications();
   resetWalletUi();
   fillRequestSelectors();
@@ -5273,6 +5277,16 @@ if (chatSendButton) {
 
 // Keep account controls available without repeating the access form after login.
 const accountSection = document.getElementById('cuenta');
+function openAccountPanel() {
+  if (currentSession && !accountSection.open) accountSection.showModal();
+}
+document.getElementById('openAccountButton')?.addEventListener('click', openAccountPanel);
+document.getElementById('backFromAccountButton')?.addEventListener('click', () => accountSection.close());
+accountSection.addEventListener('click', event => { if (event.target === accountSection) {
+  const rect = accountSection.getBoundingClientRect();
+  if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) accountSection.close();
+} });
+
 const accountCard = document.getElementById('accountSessionCard');
 if (accountSection && accountCard) accountSection.append(accountCard);
 const appMain = document.getElementById('inicio');
@@ -5408,20 +5422,6 @@ restoreSavedSession().finally(() => {
   startCoordinationPolling();
   loadHomeData();
 });
-
-// Finish the Android activity while preserving the authenticated session.
-const leaveAppButton = document.getElementById('leaveAppButton');
-if (leaveAppButton && window.Capacitor?.getPlatform?.() === 'android' && window.Capacitor?.isPluginAvailable?.('App')) {
-  leaveAppButton.hidden = false;
-  document.getElementById('leaveAppHint').hidden = false;
-  leaveAppButton.addEventListener('click', async () => {
-    try {
-      await window.Capacitor.Plugins.App.exitApp();
-    } catch (error) {
-      window.alert('No se pudo cerrar la aplicación. Intentá nuevamente.');
-    }
-  });
-}
 
 document.getElementById('enablePushButton')?.addEventListener('click', async () => {
   const button = document.getElementById('enablePushButton');

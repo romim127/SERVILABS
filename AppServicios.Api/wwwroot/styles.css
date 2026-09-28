@@ -327,7 +327,7 @@ body::selection {
   flex-wrap: wrap;
 }
 
-.nav-links a {
+.nav-links a, .nav-links button {
   color: var(--muted);
   text-decoration: none;
   font-weight: 600;
@@ -335,7 +335,7 @@ body::selection {
   border-radius: 999px;
 }
 
-.nav-links a:hover {
+.nav-links a:hover, .nav-links button:hover {
   color: var(--text);
   background: rgba(255,255,255,0.06);
 }
@@ -2612,7 +2612,7 @@ body::selection {
 @media (max-width: 640px) {
   .topbar { padding: .8rem; gap: .65rem; }
   .nav-links { display: flex; flex-wrap: wrap; justify-content: center; overflow: visible; width: 100%; gap: .3rem .5rem; padding: .4rem 0; }
-  .nav-links a { flex: 0 0 auto; white-space: nowrap; font-size: .9rem; padding: .55rem .65rem; }
+  .nav-links a, .nav-links button { flex: 0 0 auto; white-space: nowrap; font-size: .9rem; padding: .55rem .65rem; }
   .section-heading h2 { font-size: 1.45rem; }
 }
 
@@ -2620,5 +2620,11 @@ body::selection {
 .account-options summary { cursor: pointer; padding: .75rem; font-weight: 600; }
 .account-options-content { display: grid; justify-items: start; gap: .75rem; padding: .75rem; }
 .account-options-content p { margin: 0; }
-#leaveAppButton { margin-top: .5rem; }
-#leaveAppHint { color: var(--muted); }
+
+.nav-links button { border: 0; background: transparent; font-family: inherit; font-size: inherit; cursor: pointer; }
+dialog.account-section { width: min(560px, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; padding: 1rem; overflow-y: auto; color: var(--text); background: var(--bg, #101b2c); }
+dialog.account-section:not([open]) { display: none; }
+dialog.account-section::backdrop { background: rgba(0,0,0,.65); }
+.account-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.account-dialog-head h2 { margin: 0; }
+body:has(#cuenta[open]) { overflow: hidden; }

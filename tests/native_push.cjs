@@ -50,19 +50,3 @@ vm.runInContext(code, context);
   assert.equal(calls.length, before);
   console.log('PASS: native permission, registration, missing server configuration, logout and late callback handling');
 })().catch(error => { console.error(error); process.exitCode = 1; });
-
-const exitCode = source.slice(source.indexOf("const leaveAppButton ="), source.indexOf("document.getElementById('enablePushButton')?.addEventListener"));
-let exitHandler;
-let exited = false;
-const exitButton = { hidden: true, addEventListener: (event, callback) => { exitHandler = callback; } };
-const hint = { hidden: true };
-vm.runInNewContext(exitCode, {
-  document: { getElementById: id => id === 'leaveAppButton' ? exitButton : hint },
-  window: { Capacitor: { getPlatform: () => 'android', isPluginAvailable: () => true, Plugins: { App: { exitApp: async () => { exited = true; } } } } }
-});
-(async () => {
-  assert.equal(exitButton.hidden, false);
-  await exitHandler();
-  assert(exited);
-  console.log('PASS: Close application invokes Android exitApp, not minimizeApp');
-})().catch(error => { console.error(error); process.exitCode = 1; });
