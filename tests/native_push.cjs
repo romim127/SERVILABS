@@ -26,22 +26,43 @@ const context = vm.createContext({
 vm.runInContext(code, context);
 (async () => {
   await vm.runInContext('subscribeToNativePush()', context);
-  assert(!calls.includes('permission'));
-  assert(!calls.includes('register'));
-  await vm.runInContext('subscribeToNativePush(true)', context);
+  assert.equal(calls.filter(c => c === 'permission').length, 1);
+  await vm.runInContext('subscribeToNativePush()', context);
+  assert.equal(calls.filter(c => c === 'permission').length, 1);
   assert(calls.includes('permission') && calls.includes('channel') && calls.includes('register'));
   await vm.runInContext("saveNativePushToken('test-device-token-1234567890')", context);
   assert(status.textContent.includes('Falta habilitar'));
   assert(calls.includes('/api/Push/native-token'));
   await vm.runInContext('disableNativePush()', context);
   assert(calls.includes('/api/Push/native-unsubscribe') && calls.includes('unregister'));
-  assert.equal(storage.size, 0);
+  assert(!storage.has('servilabs-native-push-token'));
+  assert(storage.has('servilabs-notification-permission-requested'));
   permission = 'denied';
   await vm.runInContext('subscribeToNativePush()', context);
   assert(status.textContent.includes('Ajustes de Android'));
+  assert.equal(calls.filter(c => c === 'permission').length, 1);
+  permission = 'prompt';
+  await vm.runInContext('subscribeToNativePush()', context);
+  assert.equal(calls.filter(c => c === 'permission').length, 1);
   const before = calls.length;
   vm.runInContext('nativePushSigningOut = true', context);
   await vm.runInContext("saveNativePushToken('late-registration-token')", context);
   assert.equal(calls.length, before);
   console.log('PASS: native permission, registration, missing server configuration, logout and late callback handling');
+})().catch(error => { console.error(error); process.exitCode = 1; });
+
+const exitCode = source.slice(source.indexOf("const leaveAppButton ="), source.indexOf("document.getElementById('enablePushButton')?.addEventListener"));
+let exitHandler;
+let exited = false;
+const exitButton = { hidden: true, addEventListener: (event, callback) => { exitHandler = callback; } };
+const hint = { hidden: true };
+vm.runInNewContext(exitCode, {
+  document: { getElementById: id => id === 'leaveAppButton' ? exitButton : hint },
+  window: { Capacitor: { getPlatform: () => 'android', isPluginAvailable: () => true, Plugins: { App: { exitApp: async () => { exited = true; } } } } }
+});
+(async () => {
+  assert.equal(exitButton.hidden, false);
+  await exitHandler();
+  assert(exited);
+  console.log('PASS: Close application invokes Android exitApp, not minimizeApp');
 })().catch(error => { console.error(error); process.exitCode = 1; });

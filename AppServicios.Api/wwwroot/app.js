@@ -29,6 +29,7 @@ if (currencySelect) {
 // --- ASISTENTE IA FLOTANTE ---
 // --- NOTIFICACIONES PUSH ---
 const NATIVE_PUSH_TOKEN_KEY = 'servilabs-native-push-token';
+const PUSH_PROMPT_KEY = 'servilabs-notification-permission-requested';
 let nativePushListenersReady = false;
 let nativePushRegistering = false;
 let nativePushSigningOut = false;
@@ -73,7 +74,13 @@ async function subscribeToNativePush(requestPermission = false) {
       nativePushListenersReady = true;
     }
     let permission = await push.checkPermissions();
-    if (requestPermission && permission.receive !== 'granted') permission = await push.requestPermissions();
+    const canPrompt = permission.receive === 'prompt' || permission.receive === 'prompt-with-rationale';
+    if (canPrompt && (requestPermission || !localStorage.getItem(PUSH_PROMPT_KEY))) {
+      permission = await push.requestPermissions();
+      localStorage.setItem(PUSH_PROMPT_KEY, '1');
+    }
+    const retryButton = document.getElementById('enablePushButton');
+    if (retryButton) retryButton.hidden = permission.receive === 'granted';
     if (permission.receive !== 'granted') {
       pushStatus(permission.receive === 'denied'
         ? 'Notificaciones desactivadas. Habilitalas en Ajustes de Android → Aplicaciones → SERVILABS → Notificaciones.'
@@ -5281,7 +5288,10 @@ const preferencesTitle = document.createElement('summary');
 preferencesTitle.textContent = 'Apariencia y moneda';
 preferences.append(preferencesTitle);
 document.querySelectorAll('#mainAppHeader .theme-switch, #mainAppHeader .currency-switch').forEach((element) => preferences.append(element));
-if (accountSection) accountSection.append(preferences);
+if (accountSection) {
+  accountSection.append(preferences);
+  accountSection.append(document.getElementById('accountOptions'));
+}
 document.getElementById('requestServiceSearch')?.addEventListener('input', renderServiceOptions);
 
 setActiveRole('cliente');
@@ -5399,15 +5409,16 @@ restoreSavedSession().finally(() => {
   loadHomeData();
 });
 
-// Return to Android's home screen without discarding the authenticated session.
+// Finish the Android activity while preserving the authenticated session.
 const leaveAppButton = document.getElementById('leaveAppButton');
 if (leaveAppButton && window.Capacitor?.getPlatform?.() === 'android' && window.Capacitor?.isPluginAvailable?.('App')) {
   leaveAppButton.hidden = false;
+  document.getElementById('leaveAppHint').hidden = false;
   leaveAppButton.addEventListener('click', async () => {
     try {
-      await window.Capacitor.Plugins.App.minimizeApp();
+      await window.Capacitor.Plugins.App.exitApp();
     } catch (error) {
-      window.alert('No se pudo salir. Podés usar el botón Inicio de Android.');
+      window.alert('No se pudo cerrar la aplicación. Intentá nuevamente.');
     }
   });
 }

@@ -2611,7 +2611,14 @@ body::selection {
 #requestServiceSelect { width: 100%; min-width: 0; }
 @media (max-width: 640px) {
   .topbar { padding: .8rem; gap: .65rem; }
-  .nav-links { display: flex; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; width: 100%; gap: 1rem; padding: .4rem 0; }
-  .nav-links a { white-space: nowrap; font-size: .9rem; }
+  .nav-links { display: flex; flex-wrap: wrap; justify-content: center; overflow: visible; width: 100%; gap: .3rem .5rem; padding: .4rem 0; }
+  .nav-links a { flex: 0 0 auto; white-space: nowrap; font-size: .9rem; padding: .55rem .65rem; }
   .section-heading h2 { font-size: 1.45rem; }
 }
+
+.account-options { margin-top: 1rem; border-top: 1px solid var(--border, rgba(255,255,255,.12)); padding-top: .75rem; }
+.account-options summary { cursor: pointer; padding: .75rem; font-weight: 600; }
+.account-options-content { display: grid; justify-items: start; gap: .75rem; padding: .75rem; }
+.account-options-content p { margin: 0; }
+#leaveAppButton { margin-top: .5rem; }
+#leaveAppHint { color: var(--muted); }
