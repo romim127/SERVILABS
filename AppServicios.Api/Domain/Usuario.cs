@@ -16,6 +16,7 @@ namespace AppServicios.Api.Domain
         public string PasswordHash { get; set; } = string.Empty;
 
         // Verificación de identidad
+        public bool IdentidadPresentada { get; set; } = false;
         public bool VerificadoRenaper { get; set; } = false;
         public DateTime? FechaVerificacion { get; set; }
 

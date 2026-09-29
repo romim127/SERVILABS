@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="/icon-192.svg?v=11" />
   <link rel="manifest" href="/manifest.webmanifest?v=11" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <link rel="stylesheet" href="/styles.css?v=25" />
+  <link rel="stylesheet" href="/styles.css?v=26" />
 </head>
 <body>
     <!-- ASISTENTE IA FLOTANTE -->
@@ -81,7 +81,7 @@
           <img src="/logo.svg?v=11" alt="Logo SERVILABS" />
           <span class="login-kicker">Acceso seguro</span>
           <h1>Entrá a SERVILABS</h1>
-          <p>Coordiná servicios, pagos y mensajes desde una cuenta verificada.</p>
+          <p>Coordiná servicios, pagos y mensajes desde tu cuenta.</p>
         </div>
         <form id="loginForm" class="step-form">
           <div class="step step-login active">
@@ -143,15 +143,10 @@
     </a>
 
     <nav class="nav-links" aria-label="Navegación principal">
-      <button type="button" id="openAccountButton" data-nav-role="cliente profesional admin" aria-haspopup="dialog" aria-controls="cuenta">Mi cuenta</button>
-
-      <a href="#dashboard-cliente" data-nav-role="cliente admin">Mis solicitudes</a>
-      <a href="#dashboard-profesional" data-nav-role="profesional admin">Profesional</a>
-      <a href="#mapa-vivo">Mapa</a>
-      <a href="#billetera">Billetera</a>
-      <a href="#chat-solicitud">Chat</a>
-      <a href="#dashboard-coordinacion-real" data-nav-role="admin">Admin</a>
+      <button type="button" id="showPanelsButton">Paneles</button>
+      <button type="button" id="openAccountButton" data-nav-role="cliente profesional admin" aria-controls="cuenta">Mi cuenta</button>
     </nav>
+
 
     <div class="theme-switch" role="group" aria-label="Cambiar tema visual">
       <button type="button" data-theme-choice="light">Claro</button>
@@ -643,6 +638,7 @@
               <button type="submit" class="btn btn-secondary" id="registerContinueButton">Crear cuenta cliente</button>
             </div>
             <p class="mini-note register-feedback" id="registerFeedback" role="status" aria-live="polite">Completa tus datos para crear tu cuenta.</p>
+            <p class="mini-note">La cuenta se crea como no verificada. Después podés enviar tu foto y DNI desde Mi cuenta → Seguridad para solicitar la revisión de identidad.</p>
           </form>
         </div>
 
@@ -1332,8 +1328,8 @@
         <p>Presupuestos, estados, progreso y reputación desde un tablero moderno, adaptable y legible.</p>
       </article>
     </section>
-    <dialog id="cuenta" class="glass-panel account-section" aria-labelledby="accountTitle">
-      <div class="account-dialog-head"><h2 id="accountTitle">Mi cuenta</h2><button type="button" id="backFromAccountButton" class="btn btn-secondary btn-small">Volver</button></div>
+    <section id="cuenta" class="glass-panel account-section" hidden>
+      <h2 id="accountTitle">Mi cuenta</h2>
       <details class="account-options" id="accountOptions">
         <summary>Opciones de la cuenta</summary>
         <div class="account-options-content">
@@ -1342,7 +1338,7 @@
           <button type="button" class="btn btn-secondary btn-small" id="enablePushButton" hidden>Revisar notificaciones</button>
         </div>
       </details>
-    </dialog>
+    </section>
   </main>
 
   <footer class="footer" id="mainAppFooter" style="display:none;">
@@ -1355,7 +1351,7 @@
   <div class="toast-host" id="notificationToastHost" aria-live="polite" aria-atomic="true"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="/app.js?v=25"></script>
+  <script src="/app.js?v=26"></script>
   <script src="/ai-assistant-drag.js"></script>
 </body>
 </html>

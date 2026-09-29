@@ -10,6 +10,7 @@ namespace AppServicios.Api.Data
         {
         }
 
+        public DbSet<IdentidadDocumento> IdentidadDocumentos { get; set; }
         public DbSet<Usuario> Usuarios { get; set; }
         public DbSet<Profesional> Profesionales { get; set; }
         public DbSet<Cliente> Clientes { get; set; }
@@ -33,6 +34,7 @@ namespace AppServicios.Api.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<IdentidadDocumento>().HasOne(d => d.Usuario).WithOne().HasForeignKey<IdentidadDocumento>(d => d.UsuarioId).OnDelete(DeleteBehavior.Cascade);
 
             // Configurar relaciones
             modelBuilder.Entity<Usuario>()

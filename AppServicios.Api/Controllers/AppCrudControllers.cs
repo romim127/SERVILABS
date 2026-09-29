@@ -201,7 +201,7 @@ namespace AppServicios.Api.Controllers
                 : DateTime.SpecifyKind(request.FechaNacimiento, DateTimeKind.Utc);
             usuario.Rol = request.Rol.Trim();
             usuario.Activo = request.Activo;
-            usuario.VerificadoRenaper = request.VerificadoRenaper;
+            usuario.VerificadoRenaper = !isCreate && usuario.IdentidadPresentada && request.VerificadoRenaper;
             usuario.RecibeNotificaciones = request.RecibeNotificaciones;
 
             if (!string.IsNullOrWhiteSpace(request.PasswordHash))
@@ -411,7 +411,8 @@ namespace AppServicios.Api.Controllers
             profesional.AceptaTrabajoLejano,
             profesional.BonoPorDistancia,
             profesional.RubrosProfesionales.Select(r => r.Id).ToList(),
-            profesional.RubrosProfesionales.Select(r => r.Nombre).OrderBy(nombre => nombre).ToList());
+            profesional.RubrosProfesionales.Select(r => r.Nombre).OrderBy(nombre => nombre).ToList(),
+            profesional.Usuario is { IdentidadPresentada: true, VerificadoRenaper: true });
 
         private static void MapToEntity(ProfesionalUpsertDto request, Profesional profesional)
         {
@@ -559,7 +560,8 @@ namespace AppServicios.Api.Controllers
             cliente.RecibeNotificaciones,
             cliente.GastoPorMes,
             cliente.TotalServiciosContratados,
-            cliente.CalificacionPromedioProfesionales);
+            cliente.CalificacionPromedioProfesionales,
+            cliente.Usuario is { IdentidadPresentada: true, VerificadoRenaper: true });
 
         private static void MapToEntity(ClienteUpsertDto request, Cliente cliente)
         {
@@ -1530,7 +1532,9 @@ namespace AppServicios.Api.Controllers
             solicitud.CalificacionProfesional,
             solicitud.ComentarioProfesional,
             solicitud.CalificacionCliente,
-            solicitud.ComentarioCliente);
+            solicitud.ComentarioCliente,
+            solicitud.Cliente?.Usuario is { IdentidadPresentada: true, VerificadoRenaper: true },
+            solicitud.Profesional?.Usuario is { IdentidadPresentada: true, VerificadoRenaper: true });
 
         private static void MapToEntity(SolicitudTrabajoUpsertDto request, SolicitudTrabajo solicitud, bool isCreate)
         {

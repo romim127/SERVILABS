@@ -92,7 +92,9 @@ namespace AppServicios.Api.DTOs
         DateTime? FechaPagoAprobacion,
         List<string> Rubros,
         string? AccessToken,
-        DateTime? AccessTokenExpiresAt);
+        DateTime? AccessTokenExpiresAt,
+        bool IdentidadVerificada = false,
+        bool IdentidadPresentada = false);
 
     public sealed record ProfesionalDto(
         int Id,
@@ -114,7 +116,8 @@ namespace AppServicios.Api.DTOs
         bool AceptaTrabajoLejano,
         decimal BonoPorDistancia,
         List<int> RubroIds,
-        List<string> Rubros);
+        List<string> Rubros,
+        bool IdentidadVerificada = false);
 
     public sealed class ProfesionalUpsertDto
     {
@@ -353,7 +356,8 @@ namespace AppServicios.Api.DTOs
         bool RecibeNotificaciones,
         decimal GastoPorMes,
         int TotalServiciosContratados,
-        decimal CalificacionPromedioProfesionales);
+        decimal CalificacionPromedioProfesionales,
+        bool IdentidadVerificada = false);
 
     public sealed class ClienteUpsertDto
     {
@@ -451,7 +455,9 @@ namespace AppServicios.Api.DTOs
         int? CalificacionProfesional,
         string? ComentarioProfesional,
         int? CalificacionCliente,
-        string? ComentarioCliente);
+        string? ComentarioCliente,
+        bool ClienteIdentidadVerificada = false,
+        bool ProfesionalIdentidadVerificada = false);
 
     public sealed record MensajeSolicitudDto(
         int Id,

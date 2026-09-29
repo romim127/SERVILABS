@@ -17,7 +17,7 @@ The native-status endpoint reports whether a server file exists; successful deli
 
 Install the new Android release, log in and accept the automatic Android permission prompt. Permission status and retry are under Mi cuenta > Opciones de la cuenta. Repeat on a professional account/device.
 
-Test new matching job -> professional, acceptance/completion -> client, chat -> counterpart, both foreground and after leaving the app. Tapping a notification opens its section. Closing the account session unregisters that device; The only exit action in Mi cuenta is Cerrar sesión: it returns to the main access screen. Mi cuenta opens a dialog without scrolling the page. Android force-stop and denied permissions prevent delivery.
+Test new matching job -> professional, acceptance/completion -> client, chat -> counterpart, both foreground and after leaving the app. Tapping a notification opens its section. Closing the account session unregisters that device; The only exit action in Mi cuenta is Cerrar sesión: it returns to the main access screen. Mi cuenta is a collapsible panel alongside requests, map, messages and wallet. Android force-stop and denied permissions prevent delivery.
 
 Native subscriptions share the existing PushSubscriptions table using an fcm: endpoint prefix; web subscriptions retain their original format. Native endpoints derive the user from JWT, never from a client-supplied user id. Device registration transfers the subscription to the active account; logout only removes a subscription owned by that account.
 

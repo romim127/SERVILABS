@@ -248,7 +248,9 @@ namespace AppServicios.Api.Controllers
                 pago?.FechaAprobacion,
                 usuario.Profesional?.RubrosProfesionales.Select(r => r.Nombre).OrderBy(nombre => nombre).ToList() ?? new List<string>(),
                 accessToken,
-                accessTokenExpiresAt);
+                accessTokenExpiresAt,
+                usuario.IdentidadPresentada && usuario.VerificadoRenaper,
+                usuario.IdentidadPresentada);
         }
 
         private (string Token, DateTime ExpiresAt) GenerateJwtToken(AppServicios.Api.Domain.Usuario usuario)

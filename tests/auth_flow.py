@@ -45,7 +45,7 @@ def run():
             'ASPNETCORE_ENVIRONMENT': 'Development',
             'ASPNETCORE_URLS': base,
             'ConnectionStrings__DefaultConnection': f'Host=127.0.0.1;Port={dbport};Database=postgres;Username=postgres',
-            'SuperAdmin__Email': '', 'SuperAdmin__Password': '',
+            'SuperAdmin__Email': 'identity-admin@example.test', 'SuperAdmin__Password': '',
             'MercadoPago__AccessToken': '', 'MercadoPago__PublicKey': '',
             'VAPID__PublicKey': '', 'VAPID__PrivateKey': '',
             'OpenAI__ApiKey': '', 'OPENAI_API_KEY': '',
@@ -90,10 +90,36 @@ def run():
         check(api('/api/Auth/usuarios/99999/context', token=token)[0] == 403, 'Client cannot read another session')
         check(api('/api/does-not-exist')[0] == 404, 'Unknown API routes return 404 instead of HTML')
         partial = payload('partial@example.test', '90000002')
+        partial['usuario']['verificadoRenaper'] = True
         status, user = api('/api/Usuarios', partial['usuario'])
         check(status == 201, 'Legacy interrupted signup fixture created')
+        check(user['verificadoRenaper'] is False, 'Public signup cannot self-verify identity')
         status, resumed = api('/api/Auth/register-client', partial)
         check(status == 200 and resumed['usuarioId'] == user['id'] and resumed['clienteId'], 'Interrupted legacy registration completes safely')
+        import base64
+        png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=')
+        def upload_identity(auth, image=png):
+            boundary = 'identity-test-boundary'
+            body = b''
+            for field in ['foto', 'dni']:
+                body += (f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; filename="test.png"\r\nContent-Type: image/png\r\n\r\n').encode() + image + b'\r\n'
+            body += f'--{boundary}--\r\n'.encode()
+            headers = {'Content-Type': 'multipart/form-data; boundary=' + boundary}
+            if auth: headers['Authorization'] = 'Bearer ' + auth
+            req = urllib.request.Request(base + '/api/Identidad', data=body, headers=headers)
+            try: response = urllib.request.urlopen(req)
+            except urllib.error.HTTPError as error: response = error
+            return response.status
+        check(upload_identity(None) == 401, 'Identity upload requires login')
+        check(upload_identity(token, b'not-an-image') == 400, 'Invalid image rejected even with image content type')
+        check(upload_identity(token) == 200, 'Authenticated client submits photo and DNI')
+        state = api('/api/Identidad', token=token)[1]
+        check(state == {'presentada': True, 'verificada': False}, 'Uploaded identity stays unverified pending review')
+        check(api(f"/api/Identidad/{session['usuarioId']}/foto", token=resumed['accessToken'])[0] == 403, 'Other accounts cannot read identity photos')
+        own_image = urllib.request.urlopen(urllib.request.Request(base + f"/api/Identidad/{session['usuarioId']}/foto", headers={'Authorization': 'Bearer ' + token}))
+        check(own_image.read() == png and own_image.headers['Cache-Control'] == 'no-store', 'Owner photo is private and not cached')
+        admin_data = payload('identity-admin@example.test', '90000009')
+        admin = api('/api/Auth/register-client', admin_data)[1]
         device = {'token': 'test-native-device-token-1234567890'}
         check(api('/api/Push/native-token', device)[0] == 401, 'Native registration requires authentication')
         check(api('/api/Push/native-token', {'token': 'bad'}, token=token)[0] == 400, 'Invalid native token rejected')
@@ -103,6 +129,17 @@ def run():
         check(api('/api/Push/native-token', device, token=resumed['accessToken'])[0] == 200, 'Device can follow the currently signed-in account')
         check(api('/api/Push/native-unsubscribe', device, token=token)[0] == 200, 'Previous account unsubscribe cannot remove the new owner')
         with psycopg.connect(host='127.0.0.1', port=dbport, dbname='postgres', user='postgres', autocommit=True) as db:
+            db.execute('UPDATE "Usuarios" SET "Rol" = %s WHERE "Id" = %s', ('Administrador', admin['usuarioId']))
+            admin_token = api('/api/Auth/login', {'email': admin_data['usuario']['email'], 'password': admin_data['usuario']['passwordHash']})[1]['accessToken']
+            approve = {'adminUserId': admin['usuarioId'], 'verificadoRenaper': True, 'motivo': 'Test manual document review'}
+            check(api(f"/api/Coordinacion/admin/usuarios/{resumed['usuarioId']}/accion", approve, token=admin_token)[0] == 400, 'Admin cannot verify a user without documents')
+            check(api(f"/api/Coordinacion/admin/usuarios/{session['usuarioId']}/accion", approve, token=token)[0] == 403, 'Client cannot approve identity')
+            check(api(f"/api/Coordinacion/admin/usuarios/{session['usuarioId']}/accion", approve, token=admin_token)[0] == 200, 'Authorized admin reviews and approves submitted identity')
+            check(api('/api/Identidad', token=token)[1]['verificada'] is True, 'Reviewed identity is verified')
+            check(api(f"/api/Auth/usuarios/{session['usuarioId']}/context", token=token)[1]['identidadVerificada'] is True, 'Session exposes verified identity')
+            check(upload_identity(token) == 200 and api('/api/Identidad', token=token)[1]['verificada'] is False, 'Replacing documents requires a new review')
+            check(api('/api/Identidad', token=token, method='DELETE')[0] == 204, 'Owner can delete identity documents')
+            check(api('/api/Identidad', token=token)[1] == {'presentada': False, 'verificada': False}, 'Deletion resets verification')
             owners = db.execute('SELECT "UsuarioId" FROM "PushSubscriptions" WHERE "Endpoint" = %s', ('fcm:' + device['token'],)).fetchall()
             check(owners == [(resumed['usuarioId'],)], 'Only the current account owns the device subscription')
             check(api('/api/Push/native-unsubscribe', device, token=resumed['accessToken'])[0] == 200, 'Owner can disable native notifications on logout')
@@ -152,16 +189,32 @@ def run():
             check(restored['accessToken'] == stored['accessToken'], 'Reload restores session without discarding token')
             expect(page.locator('#requestClientSelect')).to_have_value(str(stored['clienteId']), timeout=15000)
             expect(page.locator('#acceso')).to_be_hidden()
-            expect(page.locator('#guia-roles')).to_be_hidden()
-            expect(page.locator('#cuenta')).to_be_hidden()
-            page.evaluate('window.scrollTo(0, 0)')
+            expect(page.locator('#cuenta > details > summary')).to_be_visible()
+            expect(page.locator('#identityBadge')).to_contain_text('Cliente no verificado')
             page.locator('#openAccountButton').click()
-            expect(page.locator('#cuenta')).to_be_visible()
-            check(page.evaluate('window.scrollY') == 0, 'Mi cuenta opens without scrolling to the bottom')
+            expect(page.locator('#cuenta > details')).to_have_attribute('open', '')
             check(page.locator('#leaveAppButton').count() == 0, 'Only account logout remains')
-            page.locator('#backFromAccountButton').click()
-            expect(page.locator('#cuenta')).to_be_hidden()
-            check(page.evaluate("document.querySelector('#inicio > section:not([hidden])').id") == 'dashboard-cliente', 'Client enters directly into requests without the login form')
+            page.locator('.identity-security > summary').click()
+            for selector in ['#identityPhoto', '#identityDni']:
+                page.locator(selector).set_input_files({'name': 'test.png', 'mimeType': 'image/png', 'buffer': png})
+            page.locator('#identitySubmit').click()
+            expect(page.locator('#identityStatus')).to_contain_text('pendientes de revisión')
+            expect(page.locator('#identityBadge')).to_contain_text('Cliente no verificado')
+            check(True, 'Security form submits photo and DNI without automatically verifying the client')
+
+            page.locator('#showPanelsButton').click()
+            expect(page.locator('.app-panel[open]')).to_have_count(0)
+            for width in [320, 390, 768]:
+                page.set_viewport_size({'width': width, 'height': 915})
+                check(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), f'Panel overview fits {width}px without horizontal scrolling')
+            page.set_viewport_size({'width': 412, 'height': 915})
+            page.screenshot(path=str(Path(tempfile.gettempdir()) / 'servilabs-panels.png'))
+            page.locator('#dashboard-cliente > details > summary').click()
+            expect(page.locator('#requestServiceSearch')).to_be_visible()
+            check(page.locator('.app-panel[open]').count() == 1, 'Only the selected functional panel is expanded')
+            page.set_viewport_size({'width': 320, 'height': 915})
+            check(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Expanded request panel fits a small mobile screen')
+            page.set_viewport_size({'width': 412, 'height': 915})
             search = page.locator('#requestServiceSearch')
             search.fill('PLÓMERO')
             expect(page.locator('#requestServiceSelect option')).to_have_count(5)
@@ -187,6 +240,7 @@ def run():
             if published.value.status != 201: print('REQUEST ERROR', published.value.status, published.value.text()[:1500], flush=True)
             expect(page.locator('#requestFeedback')).to_contain_text('creada correctamente', timeout=15000)
             check(True, 'Registered client publishes a service request')
+            page.locator('#chat-solicitud > details > summary').click()
             page.locator('#chatMessageInput').fill('Mensaje de prueba para coordinar el servicio')
             page.locator('#chatSendButton').click()
             expect(page.locator('#chatMessagesList')).to_contain_text('Mensaje de prueba para coordinar el servicio', timeout=15000)

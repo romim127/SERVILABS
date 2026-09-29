@@ -68,7 +68,7 @@ async function subscribeToNativePush(requestPermission = false) {
         const target = notification.data?.url;
         if (['/#chat-solicitud', '/#dashboard-cliente', '/#dashboard-profesional', '/#cuenta'].includes(target)) {
           if (target === '/#cuenta') openAccountPanel();
-          else document.querySelector(target.substring(1))?.scrollIntoView({ behavior: 'smooth' });
+          else revealAppPanel(target.substring(2));
         }
         loadNotifications();
       });
@@ -373,7 +373,7 @@ function applyCositoSuggestion() {
   if (requestFeedback) {
     requestFeedback.textContent = 'ASI cargó una descripción orientativa. Revisala antes de publicar.';
   }
-  document.getElementById('dashboard-cliente')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  revealAppPanel('dashboard-cliente');
 }
 
 if (cositoToggle && cositoBody) {
@@ -531,6 +531,7 @@ function updateNavigationForShell(roleKey, mode) {
 function setVisibleAppSections(mode = 'session') {
   const roleKey = getSessionRoleKey();
   const sections = [
+    'cuenta',
     'home-hero',
     'paneles',
     'experiencia-app',
@@ -551,6 +552,9 @@ function setVisibleAppSections(mode = 'session') {
     visible.add('acceso');
     visible.add('guia-roles');
   } else if (mode === 'session') {
+    visible.add('cuenta');
+    visible.add('rubros');
+    visible.add('guia-roles');
     visible.add('mapa-vivo');
     visible.add('billetera');
     visible.add('chat-solicitud');
@@ -657,7 +661,7 @@ function openFullRegistrationFromWizard() {
     registerFeedback.textContent = 'Completa teléfono, DNI, fecha, ubicación y elegí si sos cliente o profesional.';
   }
 
-  document.getElementById('acceso')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  revealAppPanel('acceso');
 }
 
 // Hook para login exitoso
@@ -2062,7 +2066,7 @@ function buildMapItems() {
       items.push({
         type: 'profesional',
         id: Number(item.id || 0),
-        title: item.usuarioNombre || `Profesional #${item.id || '?'}`,
+        title: `${item.usuarioNombre || 'Profesional'} · ${identityLabel('Profesional', item.identidadVerificada)}`,
         subtitle: Array.isArray(item.rubros) && item.rubros.length > 0
           ? item.rubros.join(', ')
           : 'Perfil profesional activo',
@@ -2081,7 +2085,7 @@ function buildMapItems() {
       items.push({
         type: 'cliente',
         id: Number(item.id || 0),
-        title: item.usuarioNombre || `Cliente #${item.id || '?'}`,
+        title: `${item.usuarioNombre || 'Cliente'} · ${identityLabel('Cliente', item.identidadVerificada)}`,
         subtitle: item.preferencias || 'Cliente buscando atención rápida',
         detail: item.ubicacion || 'Sin ubicación',
         location: item.ubicacion || '',
@@ -2097,7 +2101,7 @@ function buildMapItems() {
         type: 'solicitud',
         id: Number(item.id || 0),
         title: formatRequestTitle(item),
-        subtitle: `${item.clienteNombre || 'Cliente'} · ${item.estado || 'Pendiente'}`,
+        subtitle: `${item.clienteNombre || 'Cliente'} · ${identityLabel('Cliente', item.clienteIdentidadVerificada)} · ${item.estado || 'Pendiente'}`,
         detail: `${formatCurrency(item.presupuestoEstimado || 0)} · ${item.ubicacion || 'Sin ubicación'}`,
         location: item.ubicacion || '',
         latitud: Number(item.latitud || 0),
@@ -2670,6 +2674,7 @@ function applySessionUI() {
   }
 
   showAppAfterAuth('session');
+  renderIdentityBadge();
 
   const rubros = Array.isArray(currentSession.rubros) && currentSession.rubros.length > 0
     ? currentSession.rubros.join(', ')
@@ -2686,8 +2691,8 @@ function applySessionUI() {
       : 'Sesión lista para publicar y seguir solicitudes.';
 
   sessionSummary.innerHTML = `
-    <strong>${currentSession.nombre}</strong>
-    <small>${currentSession.email} · Rol: ${currentSession.rol}</small>
+    <strong>${escapeHtml(currentSession.nombre)}</strong>
+    <small>${escapeHtml(currentSession.email)} · ${identityLabel(currentSession.rol, currentSession.identidadVerificada)}</small>
     <small>Ubicación: ${currentSession.ubicacion || 'Sin ubicación cargada'}</small>
     <small>${sessionDetail}</small>`;
 
@@ -2737,7 +2742,8 @@ async function clearSession() {
     pushStatus('No se pudo desactivar el dispositivo. Revisá tu conexión e intentá cerrar sesión de nuevo.');
     return;
   }
-  document.getElementById('cuenta')?.close();
+  closeAllAppPanels();
+  document.getElementById('identityForm')?.reset();
   setWizardStep('login');
   currentSession = null;
   currentShellMode = 'wizard';
@@ -2826,17 +2832,18 @@ async function handleLogin() {
       setAccountRole('profesional');
       setActiveRole('profesional');
       lastRegisteredProfessionalId = Number(session.profesionalId || 0);
-      document.getElementById('dashboard-profesional')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
     } else if (session.rol === 'Administrador') {
       setActiveRole('coordinacion');
-      document.getElementById('dashboard-coordinacion-real')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
     } else {
       setAccountRole('cliente');
       setActiveRole('cliente');
       lastRegisteredClientId = Number(session.clienteId || 0);
-      document.getElementById('dashboard-cliente')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
     }
 
+    showPanelsOverview();
     fillRequestSelectors();
     fillProfessionalSelector();
     await Promise.all([loadRequests(), loadProfessionalDashboard(), loadNotifications(), loadWallet(), loadCoordinationDashboard()]);
@@ -3496,8 +3503,7 @@ async function submitRegistration() {
     }
 
     setActiveAuthTab('login');
-    const targetId = isProfessional ? 'dashboard-profesional' : 'dashboard-cliente';
-    document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showPanelsOverview();
     void loadHomeData();
   } catch (error) {
     console.error(error);
@@ -3847,9 +3853,9 @@ function renderAdminUsers(items, adminMode) {
     return `
       <tr>
         <td>
-          <strong>${item.nombre || 'Usuario'}</strong><br />
-          <small>${item.email || ''}</small><br />
-          <small>Alta ${formatDateTimeLabel(item.fechaRegistro)} · ${item.ubicacion || 'Sin ubicación'}</small>
+          <strong>${escapeHtml(item.nombre || 'Usuario')}</strong><br />
+          <small>${escapeHtml(item.email || '')}</small><br />
+          <small>Alta ${formatDateTimeLabel(item.fechaRegistro)} · ${escapeHtml(item.ubicacion || 'Sin ubicación')}</small>
         </td>
         <td>${item.rol || 'Sin rol'}</td>
         <td>${item.activo ? 'Activo' : 'Suspendido'} · ${item.verificadoRenaper ? 'Verificado' : 'Sin verificar'} · ${item.recibeNotificaciones ? 'Notif. ON' : 'Notif. OFF'}</td>
@@ -3857,6 +3863,7 @@ function renderAdminUsers(items, adminMode) {
         <td>
           <div class="inline-actions">
             ${suspendButton}
+            <button type="button" class="action-btn" data-identity-review="${item.id}">Ver foto y DNI</button>
             <button type="button" class="action-btn ${item.verificadoRenaper ? '' : 'accept'}" data-admin-action="toggle-verify" data-user-id="${item.id}" data-current-verified="${item.verificadoRenaper}">${item.verificadoRenaper ? 'Quitar verif.' : 'Verificar'}</button>
             <button type="button" class="action-btn" data-admin-action="toggle-notifications" data-user-id="${item.id}" data-current-notify="${item.recibeNotificaciones}">${item.recibeNotificaciones ? 'Silenciar' : 'Habilitar avisos'}</button>
             ${paymentButton}
@@ -4407,7 +4414,7 @@ function openChatForRequest(requestId) {
     chatRequestSelect.value = String(selectedChatRequestId);
   }
   loadChatMessages();
-  document.getElementById('chat-solicitud')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  revealAppPanel('chat-solicitud');
 }
 
 async function sendChatMessage() {
@@ -4502,6 +4509,7 @@ function renderRequestList(items) {
     card.innerHTML = `
       <strong>${item.servicioNombre || 'Servicio'}</strong>
       <small>${item.descripcion || 'Sin descripción'}</small>
+      ${item.profesionalId ? `<small>${escapeHtml(item.profesionalNombre || 'Profesional')} · ${identityLabel('Profesional', item.profesionalIdentidadVerificada)}</small>` : ''}
       <small>Estado: ${item.estado || 'Pendiente'} · Fecha: ${formatDateLabel(item.fechaRequerida)}</small>
       <small>Presupuesto: ${formatCurrency(item.presupuestoEstimado || 0)}</small>
       ${distanceSummary ? `<small>${distanceSummary}</small>` : ''}
@@ -4573,7 +4581,7 @@ function renderProfessionalLists(items) {
       card.innerHTML = `
         <strong>${formatRequestTitle(item)}</strong>
         <small>${item.descripcion || 'Sin descripción'}</small>
-        <small>Cliente: ${item.clienteNombre || 'N/A'} · Fecha: ${formatDateLabel(item.fechaRequerida)}</small>
+        <small>Cliente: ${escapeHtml(item.clienteNombre || 'N/A')} · ${identityLabel('Cliente', item.clienteIdentidadVerificada)} · Fecha: ${formatDateLabel(item.fechaRequerida)}</small>
         <small>Presupuesto: ${formatCurrency(item.presupuestoEstimado || 0)}</small>
         ${distanceSummary ? `<small>${distanceSummary}</small>` : ''}
         <div class="inline-actions">
@@ -5277,16 +5285,8 @@ if (chatSendButton) {
 
 // Keep account controls available without repeating the access form after login.
 const accountSection = document.getElementById('cuenta');
-function openAccountPanel() {
-  if (currentSession && !accountSection.open) accountSection.showModal();
-}
+function openAccountPanel() { revealAppPanel('cuenta'); loadIdentityStatus(); }
 document.getElementById('openAccountButton')?.addEventListener('click', openAccountPanel);
-document.getElementById('backFromAccountButton')?.addEventListener('click', () => accountSection.close());
-accountSection.addEventListener('click', event => { if (event.target === accountSection) {
-  const rect = accountSection.getBoundingClientRect();
-  if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) accountSection.close();
-} });
-
 const accountCard = document.getElementById('accountSessionCard');
 if (accountSection && accountCard) accountSection.append(accountCard);
 const appMain = document.getElementById('inicio');
@@ -5307,6 +5307,156 @@ if (accountSection) {
   accountSection.append(document.getElementById('accountOptions'));
 }
 document.getElementById('requestServiceSearch')?.addEventListener('input', renderServiceOptions);
+
+
+function identityLabel(role, verified) {
+  const label = role === 'Profesional' ? 'Profesional' : role === 'Administrador' ? 'Administrador' : 'Cliente';
+  return `${label} ${verified === true ? 'verificado' : 'no verificado'}`;
+}
+function renderIdentityBadge() {
+  const badge = document.getElementById('identityBadge');
+  if (!badge || !currentSession) return;
+  badge.textContent = identityLabel(currentSession.rol, currentSession.identidadVerificada);
+  badge.classList.toggle('verified', currentSession.identidadVerificada === true);
+}
+function closeAllAppPanels() {
+  document.querySelectorAll('.app-panel').forEach(panel => { panel.open = false; });
+}
+function showPanelsOverview() {
+  closeAllAppPanels();
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+function revealAppPanel(id) {
+  const section = document.getElementById(id);
+  if (!section || section.hidden) return;
+  const panel = section.querySelector(':scope > .app-panel');
+  if (panel) panel.open = true;
+  section.scrollIntoView({ behavior: 'instant', block: 'start' });
+}
+const panelDefinitions = [
+  ['cuenta', 'Mi cuenta', 'Perfil, seguridad y notificaciones'],
+  ['dashboard-cliente', 'Solicitudes', 'Publicá un trabajo y consultá su estado'],
+  ['dashboard-profesional', 'Trabajos', 'Solicitudes y actividad profesional'],
+  ['mapa-vivo', 'Mapa', 'Servicios y profesionales cerca tuyo'],
+  ['chat-solicitud', 'Mensajes', 'Conversaciones de tus solicitudes'],
+  ['billetera', 'Billetera', 'Pagos y movimientos'],
+  ['rubros', 'Servicios', 'Rubros y servicios disponibles'],
+  ['guia-roles', 'Ayuda', 'Cómo usar SERVILABS'],
+  ['dashboard-coordinacion-real', 'Administración', 'Gestión y revisión de identidades']
+];
+const panelsIntro = document.createElement('div');
+panelsIntro.className = 'panels-intro';
+panelsIntro.innerHTML = '<div><h1>Paneles</h1><p>Abrí la sección que necesitás.</p></div><span id="identityBadge" class="identity-badge"></span>';
+appMain.prepend(panelsIntro);
+panelDefinitions.forEach(([id, title, description]) => {
+  const section = document.getElementById(id);
+  if (!section) return;
+  const details = document.createElement('details');
+  details.className = 'app-panel';
+  const summary = document.createElement('summary');
+  summary.innerHTML = `<span><strong>${title}</strong><small>${description}</small></span>`;
+  const content = document.createElement('div');
+  content.className = 'app-panel-content';
+  while (section.firstChild) content.append(section.firstChild);
+  details.append(summary, content);
+  section.append(details);
+  section.classList.add('app-section-panel');
+  appMain.append(section);
+  details.addEventListener('toggle', () => {
+    if (!details.open) return;
+    document.querySelectorAll('.app-panel').forEach(other => { if (other !== details) other.open = false; });
+    if (id === 'mapa-vivo') window.setTimeout(() => mapInstance?.invalidateSize(), 100);
+    if (id === 'cuenta') loadIdentityStatus();
+  });
+});
+document.getElementById('showPanelsButton').addEventListener('click', () => {
+  closeAllAppPanels();
+  panelsIntro.scrollIntoView({ behavior: 'instant', block: 'start' });
+});
+const securityPanel = document.createElement('details');
+securityPanel.className = 'identity-security';
+securityPanel.innerHTML = `<summary>Seguridad · Foto y DNI</summary>
+  <p id="identityStatus" role="status">Tu cuenta figura como no verificada hasta la revisión de tu identidad.</p>
+  <form id="identityForm">
+    <label for="identityPhoto">Foto de tu rostro</label>
+    <input type="file" id="identityPhoto" name="foto" accept="image/jpeg,image/png" required>
+    <label for="identityDni">Foto del frente de tu DNI</label>
+    <input type="file" id="identityDni" name="dni" accept="image/jpeg,image/png" required>
+    <p>Imágenes JPG o PNG de hasta 4 MB. Se usan para revisar tu identidad y no se muestran públicamente. Enviarlas no verifica la cuenta automáticamente.</p>
+    <button type="submit" class="btn btn-primary" id="identitySubmit">Enviar para revisión</button>
+    <button type="button" class="btn btn-secondary" id="identityDelete" hidden>Eliminar documentación</button>
+  </form>`;
+accountCard.after(securityPanel);
+async function loadIdentityStatus() {
+  if (!currentSession) return;
+  const identityUserId = currentSession.usuarioId;
+  try {
+    const response = await fetch('/api/Identidad');
+    if (!response.ok) throw new Error('No se pudo consultar la identidad.');
+    const state = await response.json();
+    if (currentSession?.usuarioId !== identityUserId) return;
+    currentSession.identidadVerificada = state.verificada;
+    currentSession.identidadPresentada = state.presentada;
+    const accountLabel = sessionSummary?.querySelector('small');
+    if (accountLabel) accountLabel.textContent = `${currentSession.email} · ${identityLabel(currentSession.rol, state.verificada)}`;
+    [cachedClientes, cachedProfesionales].forEach(items => items.forEach(item => {
+      if (item.usuarioId === identityUserId) item.identidadVerificada = state.verificada;
+    }));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
+    renderIdentityBadge();
+    document.getElementById('identityStatus').textContent = `${identityLabel(currentSession.rol, state.verificada)}. ${state.verificada ? 'Identidad revisada.' : state.presentada ? 'Foto y DNI pendientes de revisión.' : 'Completá la foto y el DNI para solicitar la revisión.'}`;
+    document.getElementById('identityDelete').hidden = !state.presentada;
+  } catch (error) { document.getElementById('identityStatus').textContent = error.message; }
+}
+document.getElementById('identityForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = document.getElementById('identitySubmit');
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/Identidad', { method: 'POST', body: new FormData(event.target) });
+    if (!response.ok) throw new Error(await extractApiError(response));
+    event.target.reset();
+    await loadIdentityStatus();
+  } catch (error) { document.getElementById('identityStatus').textContent = error.message; }
+  finally { button.disabled = false; }
+});
+document.getElementById('identityDelete').addEventListener('click', async () => {
+  if (!window.confirm('¿Eliminar la foto y el DNI? Tu cuenta quedará no verificada.')) return;
+  const response = await fetch('/api/Identidad', { method: 'DELETE' });
+  if (response.ok) await loadIdentityStatus();
+  else document.getElementById('identityStatus').textContent = 'No se pudieron eliminar las imágenes. Intentá nuevamente.';
+});
+const reviewDialog = document.createElement('dialog');
+reviewDialog.className = 'identity-review-dialog';
+reviewDialog.innerHTML = '<h2>Documentación de identidad</h2><p>Compará el rostro, la foto del documento y los datos de la cuenta antes de verificar.</p><div class="identity-images"></div><button type="button" class="btn btn-secondary">Volver</button>';
+document.body.append(reviewDialog);
+let reviewUrls = [];
+let identityReviewLoading = false;
+reviewDialog.querySelector('button').addEventListener('click', () => reviewDialog.close());
+reviewDialog.addEventListener('close', () => { reviewUrls.forEach(url => URL.revokeObjectURL(url)); reviewUrls = []; reviewDialog.querySelector('.identity-images').replaceChildren(); });
+document.addEventListener('click', async event => {
+  const button = event.target.closest('[data-identity-review]');
+  if (!button || identityReviewLoading) return;
+  identityReviewLoading = true;
+  button.disabled = true;
+  try {
+    const metadata = await fetch(`/api/Identidad/${button.dataset.identityReview}/datos`);
+    if (!metadata.ok) throw new Error('No se pudieron consultar los datos de la cuenta.');
+    const user = await metadata.json();
+    reviewDialog.querySelector('p').textContent = `${user.nombre} · DNI ${user.dni}. Compará estos datos y el rostro con la documentación antes de verificar.`;
+    const images = [];
+    for (const kind of ['foto', 'dni']) {
+      const response = await fetch(`/api/Identidad/${button.dataset.identityReview}/${kind}`);
+      if (!response.ok) throw new Error(response.status === 404 ? 'Esta cuenta todavía no presentó foto y DNI.' : 'No se pudo consultar la documentación.');
+      const image = document.createElement('img');
+      image.src = URL.createObjectURL(await response.blob());
+      reviewUrls.push(image.src); image.alt = kind === 'foto' ? 'Foto de rostro' : 'Documento de identidad'; images.push(image);
+    }
+    reviewDialog.querySelector('.identity-images').replaceChildren(...images);
+    reviewDialog.showModal();
+  } catch (error) { reviewUrls.forEach(url => URL.revokeObjectURL(url)); reviewUrls = []; setAdminFeedback(error.message, true); }
+  finally { button.disabled = false; identityReviewLoading = false; }
+});
 
 setActiveRole('cliente');
 setActiveAuthTab('login');

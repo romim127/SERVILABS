@@ -105,6 +105,8 @@ namespace AppServicios.Api.Controllers
                 return BadRequest("No puedes suspender tu propio acceso administrador desde este panel.");
             }
 
+            if (request.VerificadoRenaper == true && !await _context.IdentidadDocumentos.AnyAsync(d => d.UsuarioId == userId))
+                return BadRequest("Antes de verificar la identidad deben presentarse la foto y el DNI.");
             var cambios = new List<string>();
 
             if (request.Activo.HasValue && usuario.Activo != request.Activo.Value)
@@ -577,7 +579,7 @@ namespace AppServicios.Api.Controllers
                     u.Email,
                     u.Rol,
                     u.Activo,
-                    u.VerificadoRenaper,
+                    u.VerificadoRenaper && u.IdentidadPresentada,
                     u.RecibeNotificaciones,
                     u.FechaRegistro,
                     ubicacion,
@@ -618,7 +620,7 @@ namespace AppServicios.Api.Controllers
                 usuario.Email,
                 usuario.Rol,
                 usuario.Activo,
-                usuario.VerificadoRenaper,
+                usuario.VerificadoRenaper && usuario.IdentidadPresentada,
                 usuario.RecibeNotificaciones,
                 usuario.FechaRegistro,
                 ubicacion,
