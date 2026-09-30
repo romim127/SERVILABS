@@ -11,7 +11,7 @@ Android 1.0.7 (8) usa @capacitor/browser: entrega única por fragmento URL, cook
 Conservar CLIENT_ID, CLIENT_SECRET, TOKEN_URL y URLs NUMBER_VERIFICATION_URL, KYC_MATCH_URL, SIM_SWAP_URL y DEVICE_LOCATION_URL con prefijo OPEN_GATEWAY_. No pegar claves en la aplicación ni en Git.
 
 - OPEN_GATEWAY_AUTHORIZE_URL: endpoint de autorización OIDC. El AUTH_URL anterior suele ser bc-authorize (CIBA); no es intercambiable. Para el sandbox oficial se deriva /apigateway/authorize de /apigateway/bc-authorize. Para otros proveedores especificar el endpoint OIDC oficial.
-- OPEN_GATEWAY_REDIRECT_URI: https://appservicios-mn6i.onrender.com/api/Verificaciones/callback. Registrar exactamente esta URL en la aplicación del portal de Telefónica. Si se omite, se deriva de APP_PUBLIC_URL (o App:PublicUrl).
+- OPEN_GATEWAY_REDIRECT_URI: https://appservicios-mn6i.onrender.com/api/Verificaciones/callback. Registrar exactamente esta URL en la aplicación del portal de Telefónica. Si se omite, se deriva de APP_PUBLIC_URL (o App:PublicUrl); si tampoco están definidas, usa el dominio canónico appservicios-mn6i.onrender.com que ya utiliza el contenedor móvil.
 - OPEN_GATEWAY_MODE: sandbox por defecto; production únicamente con acceso real contratado y validado. Un endpoint que contiene sandbox siempre conserva el resultado de prueba aunque MODE sea production.
 - Scopes específicos opcionales: OPEN_GATEWAY_NUMBER_VERIFICATION_SCOPE, OPEN_GATEWAY_KYC_MATCH_SCOPE, OPEN_GATEWAY_SIM_SWAP_SCOPE, OPEN_GATEWAY_DEVICE_LOCATION_SCOPE. Los valores predeterminados son los documentados por Telefónica, con propósito FraudPreventionAndDetection. El antiguo OPEN_GATEWAY_SCOPE global no se aplica a todas las APIs porque los permisos son diferentes.
 

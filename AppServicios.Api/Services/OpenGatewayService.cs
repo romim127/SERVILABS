@@ -22,7 +22,7 @@ public sealed class OpenGatewayService(IConfiguration config, IHttpClientFactory
             return auth?.EndsWith("/authorize") == true ? auth : null;
         }
     }
-    public string? CallbackUrl => Value("REDIRECT_URI") ?? ((config["APP_PUBLIC_URL"] ?? config["App:PublicUrl"])?.TrimEnd('/') + "/api/Verificaciones/callback");
+    public string? CallbackUrl => Value("REDIRECT_URI") ?? ((config["APP_PUBLIC_URL"] ?? config["App:PublicUrl"] ?? "https://appservicios-mn6i.onrender.com").TrimEnd('/') + "/api/Verificaciones/callback");
     public bool ValidUrl(string? url) => Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == "https" || (environment.IsDevelopment() && uri.IsLoopback && uri.Scheme == "http"));
     public bool IsTest(string type) => !string.Equals(Value("MODE"), "production", StringComparison.OrdinalIgnoreCase)
         || new[] { Endpoint(type), Value("TOKEN_URL"), AuthorizeUrl }.Any(x => x?.Contains("sandbox", StringComparison.OrdinalIgnoreCase) == true);
