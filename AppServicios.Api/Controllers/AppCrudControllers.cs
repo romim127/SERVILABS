@@ -194,7 +194,7 @@ namespace AppServicios.Api.Controllers
         {
             usuario.Nombre = request.Nombre.Trim();
             usuario.Email = request.Email.Trim();
-            usuario.Telefono = request.Telefono.Trim();
+            usuario.Telefono = AppServicios.Api.Helpers.Telefono.Normalizar(request.Telefono)!;
             usuario.DNI = request.Dni.Trim();
             usuario.FechaNacimiento = request.FechaNacimiento.Kind == DateTimeKind.Utc
                 ? request.FechaNacimiento

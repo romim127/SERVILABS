@@ -10,6 +10,8 @@ namespace AppServicios.Api.Data
         {
         }
 
+        public DbSet<PerfilPublico> PerfilesPublicos { get; set; }
+        public DbSet<VerificacionLinea> VerificacionesLinea { get; set; }
         public DbSet<IdentidadDocumento> IdentidadDocumentos { get; set; }
         public DbSet<Usuario> Usuarios { get; set; }
         public DbSet<Profesional> Profesionales { get; set; }
@@ -34,6 +36,9 @@ namespace AppServicios.Api.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<PerfilPublico>().HasOne(p => p.Usuario).WithOne().HasForeignKey<PerfilPublico>(p => p.UsuarioId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<VerificacionLinea>().HasOne(p => p.Usuario).WithMany().HasForeignKey(p => p.UsuarioId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<VerificacionLinea>().HasIndex(p => new { p.UsuarioId, p.Creado });
             modelBuilder.Entity<IdentidadDocumento>().HasOne(d => d.Usuario).WithOne().HasForeignKey<IdentidadDocumento>(d => d.UsuarioId).OnDelete(DeleteBehavior.Cascade);
 
             // Configurar relaciones

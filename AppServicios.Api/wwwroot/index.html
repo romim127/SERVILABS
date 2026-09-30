@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="/icon-192.svg?v=11" />
   <link rel="manifest" href="/manifest.webmanifest?v=11" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <link rel="stylesheet" href="/styles.css?v=26" />
+  <link rel="stylesheet" href="/styles.css?v=27" />
 </head>
 <body>
     <!-- ASISTENTE IA FLOTANTE -->
@@ -143,8 +143,8 @@
     </a>
 
     <nav class="nav-links" aria-label="Navegación principal">
-      <button type="button" id="showPanelsButton">Paneles</button>
-      <button type="button" id="openAccountButton" data-nav-role="cliente profesional admin" aria-controls="cuenta">Mi cuenta</button>
+
+      <button type="button" id="openAccountButton" data-nav-role="cliente profesional admin" aria-controls="cuenta"><span class="profile-avatar" id="accountAvatar" aria-hidden="true"></span><span>Mi cuenta</span></button>
     </nav>
 
 
@@ -479,8 +479,11 @@
 
             <div class="register-split">
               <label class="form-field">
-                <span>Teléfono</span>
-                <input class="text-input" id="registerPhoneInput" type="text" required placeholder="Tu teléfono" />
+                <span>País</span>
+                <select class="text-input" id="registerCountryInput" aria-label="País del celular"></select>
+                <span>Celular</span>
+                <input class="text-input" id="registerPhoneInput" type="tel" inputmode="tel" autocomplete="tel-national" required placeholder="261 1234567" aria-describedby="registerPhoneHint" />
+                <small id="registerPhoneHint">Código de área y número, sin el 0 y sin el 15.</small>
               </label>
               <label class="form-field">
                 <span>DNI</span>
@@ -1351,7 +1354,7 @@
   <div class="toast-host" id="notificationToastHost" aria-live="polite" aria-atomic="true"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="/app.js?v=26"></script>
+  <script src="/app.js?v=27"></script>
   <script src="/ai-assistant-drag.js"></script>
 </body>
 </html>

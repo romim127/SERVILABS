@@ -2065,6 +2065,8 @@ function buildMapItems() {
     cachedProfesionales.slice(0, 18).forEach((item) => {
       items.push({
         type: 'profesional',
+        usuarioId: item.usuarioId,
+        nombre: item.usuarioNombre,
         id: Number(item.id || 0),
         title: `${item.usuarioNombre || 'Profesional'} · ${identityLabel('Profesional', item.identidadVerificada)}`,
         subtitle: Array.isArray(item.rubros) && item.rubros.length > 0
@@ -2084,6 +2086,8 @@ function buildMapItems() {
     cachedClientes.slice(0, 18).forEach((item) => {
       items.push({
         type: 'cliente',
+        usuarioId: item.usuarioId,
+        nombre: item.usuarioNombre,
         id: Number(item.id || 0),
         title: `${item.usuarioNombre || 'Cliente'} · ${identityLabel('Cliente', item.identidadVerificada)}`,
         subtitle: item.preferencias || 'Cliente buscando atención rápida',
@@ -2308,7 +2312,9 @@ function renderMapLegend(items) {
       ${distanceLine}
       ${visibilityLine}
       <small>${item.source === 'geocoded' ? 'Ubicación aproximada por dirección cargada' : 'Ubicación registrada'}</small>`;
+    if (item.usuarioId) card.insertAdjacentHTML('afterbegin', profileLink(item.usuarioId, item.nombre));
     mapLegendList.appendChild(card);
+    hydrateAvatars(card);
   });
 
   if (items.length > visibleItems.length) {
@@ -2675,6 +2681,7 @@ function applySessionUI() {
 
   showAppAfterAuth('session');
   renderIdentityBadge();
+  loadOwnProfile();
 
   const rubros = Array.isArray(currentSession.rubros) && currentSession.rubros.length > 0
     ? currentSession.rubros.join(', ')
@@ -2744,6 +2751,11 @@ async function clearSession() {
   }
   closeAllAppPanels();
   document.getElementById('identityForm')?.reset();
+  document.getElementById('publicPhotoForm')?.reset();
+  document.getElementById('profilePhoneForm')?.reset();
+  if (document.getElementById('profilePhoneNumber')) delete document.getElementById('profilePhoneNumber').dataset.edited;
+  if (document.getElementById('lineConsent')) document.getElementById('lineConsent').checked = false;
+  document.querySelectorAll('.public-profile-dialog').forEach(dialog => dialog.close());
   setWizardStep('login');
   currentSession = null;
   currentShellMode = 'wizard';
@@ -2902,7 +2914,8 @@ function getRegistrationBaseData() {
   const isProfessional = role === 'profesional';
   const nombre = registerNameInput?.value.trim() || '';
   const email = registerEmailInput?.value.trim() || '';
-  const telefono = registerPhoneInput?.value.trim() || '';
+  const telefono = normalizePhone(registerPhoneInput?.value, document.getElementById('registerCountryInput')?.value);
+  if (!telefono) return { isProfessional, error: 'Revisá el celular: ingresá código de área y número, sin 0 ni 15 para Argentina.' };
   const dni = registerDniInput?.value.trim() || '';
   const fechaNacimiento = registerBirthDateInput?.value || '';
   const ubicacion = registerLocationInput?.value.trim() || '';
@@ -4322,10 +4335,11 @@ function renderChatMessages(items) {
     const own = Number(item.usuarioId || 0) === Number(currentSession?.usuarioId || 0);
     bubble.className = `chat-bubble ${own ? 'is-own' : ''}`;
     bubble.innerHTML = `
-      <strong>${own ? 'Tú' : (item.remitenteNombre || 'Usuario')}</strong>
-      <small>${item.contenido || ''}</small>
+      ${profileLink(item.usuarioId, own ? currentSession.nombre : item.remitenteNombre)}
+      <small>${escapeHtml(item.contenido || '')}</small>
       <small>${formatDateTimeLabel(item.fechaEnvio)}</small>`;
     chatMessagesList.appendChild(bubble);
+    hydrateAvatars(bubble);
   });
 
   chatMessagesList.scrollTop = chatMessagesList.scrollHeight;
@@ -5285,7 +5299,7 @@ if (chatSendButton) {
 
 // Keep account controls available without repeating the access form after login.
 const accountSection = document.getElementById('cuenta');
-function openAccountPanel() { revealAppPanel('cuenta'); loadIdentityStatus(); }
+function openAccountPanel() { revealAppPanel('cuenta'); loadIdentityStatus(); loadLineVerification(); }
 document.getElementById('openAccountButton')?.addEventListener('click', openAccountPanel);
 const accountCard = document.getElementById('accountSessionCard');
 if (accountSection && accountCard) accountSection.append(accountCard);
@@ -5366,10 +5380,10 @@ panelDefinitions.forEach(([id, title, description]) => {
     if (!details.open) return;
     document.querySelectorAll('.app-panel').forEach(other => { if (other !== details) other.open = false; });
     if (id === 'mapa-vivo') window.setTimeout(() => mapInstance?.invalidateSize(), 100);
-    if (id === 'cuenta') loadIdentityStatus();
+    if (id === 'cuenta') { loadIdentityStatus(); loadLineVerification(); }
   });
 });
-document.getElementById('showPanelsButton').addEventListener('click', () => {
+document.getElementById('showPanelsButton')?.addEventListener('click', () => {
   closeAllAppPanels();
   panelsIntro.scrollIntoView({ behavior: 'instant', block: 'start' });
 });
@@ -5568,9 +5582,209 @@ async function loadHomeData() {
   }
 }
 
+
+// Public profile images never use the private identity-document endpoint.
+const phoneCountries = [['54','🇦🇷 Argentina (+54)'],['598','Uruguay (+598)'],['56','Chile (+56)'],['55','Brasil (+55)'],['595','Paraguay (+595)'],['591','Bolivia (+591)'],['51','Perú (+51)'],['57','Colombia (+57)'],['34','España (+34)'],['1','Estados Unidos / Canadá (+1)']];
+function countryOptions() { return phoneCountries.map(([code,label]) => `<option value="${code}">${label}</option>`).join(''); }
+function normalizePhone(raw, country = '54') {
+  let value = String(raw || '').replace(/[\s()\-]/g, '');
+  if (value.startsWith('00')) value = '+' + value.slice(2);
+  if (value.startsWith('+')) {
+    if (!/^\+[1-9]\d{7,14}$/.test(value)) return null;
+    if (!value.startsWith('+54')) return value;
+    value = value.slice(3); country = '54';
+  }
+  if (!/^\d+$/.test(value)) return null;
+  if (country === '54') {
+    if (value.length === 11 && value.startsWith('9')) value = value.slice(1);
+    return /^\d{10}$/.test(value) && !value.startsWith('0') ? '+549' + value : null;
+  }
+  return /^\+[1-9]\d{7,14}$/.test('+' + country + value) ? '+' + country + value : null;
+}
+const registerCountry = document.getElementById('registerCountryInput');
+registerCountry.innerHTML = countryOptions();
+registerCountry.addEventListener('change', () => {
+  document.getElementById('registerPhoneHint').textContent = registerCountry.value === '54' ? 'Código de área y número, sin el 0 y sin el 15.' : 'Ingresá el número nacional con código de área.';
+  registerPhoneInput.placeholder = registerCountry.value === '54' ? '261 1234567' : 'Código de área y número';
+});
+function initials(name) { return String(name || 'Usuario').trim().split(/\s+/).slice(0,2).map(x => Array.from(x)[0] || '').join('').toUpperCase(); }
+function profileLink(id, name) {
+  id = Number(id);
+  if (!Number.isSafeInteger(id) || id <= 0) return `<strong>${escapeHtml(name || 'Usuario')}</strong>`;
+  return `<button type="button" class="profile-link" data-profile-id="${id}" aria-label="Ver perfil de ${escapeHtml(name || 'Usuario')}"><span class="profile-avatar" data-avatar-id="${id}" aria-hidden="true">${escapeHtml(initials(name))}</span><span>${escapeHtml(name || 'Usuario')}</span></button>`;
+}
+function setAvatar(element, url, name) {
+  if (!element) return;
+  element.textContent = initials(name);
+  if (!url) return;
+  const img = document.createElement('img'); img.alt = ''; img.loading = 'lazy';
+  img.addEventListener('error', () => { img.remove(); });
+  img.src = url; element.append(img);
+}
+function hydrateAvatars(root = document) {
+  root.querySelectorAll('[data-avatar-id]').forEach(el => setAvatar(el, `/api/Perfiles/${Number(el.dataset.avatarId)}/foto`, el.textContent));
+}
+const publicProfilePanel = document.createElement('section');
+publicProfilePanel.className = 'profile-settings';
+publicProfilePanel.innerHTML = `<h3>Tu foto de perfil</h3><div class="profile-preview"><span class="profile-avatar profile-avatar-large" id="ownProfileAvatar" aria-hidden="true"></span><button type="button" class="btn btn-secondary" id="viewOwnProfile">Ver mi perfil público</button></div>
+  <p>Esta foto será visible en tu perfil y en mensajes. Es independiente de la documentación de identidad y no verifica tu cuenta.</p>
+  <form id="publicPhotoForm"><label for="publicPhoto">Elegir foto de perfil</label><input type="file" id="publicPhoto" accept="image/jpeg,image/png" required><small>JPG o PNG, hasta 4 MB.</small><div class="profile-actions"><button class="btn btn-primary" type="submit">Guardar foto</button><button class="btn btn-secondary" id="deletePublicPhoto" type="button" hidden>Quitar foto</button></div></form><p id="publicPhotoStatus" role="status"></p>`;
+accountCard.before(publicProfilePanel);
+async function loadOwnProfile() {
+  const id = currentSession?.usuarioId;
+  setAvatar(document.getElementById('accountAvatar'), null, currentSession?.nombre);
+  if (!id) return;
+  try {
+    const response = await fetch(`/api/Perfiles/${id}`);
+    if (!response.ok) throw new Error('No se pudo cargar tu foto.');
+    const profile = await response.json();
+    if (currentSession?.usuarioId !== id) return;
+    ['accountAvatar','ownProfileAvatar'].forEach(key => setAvatar(document.getElementById(key), profile.fotoUrl, profile.nombre));
+    document.getElementById('deletePublicPhoto').hidden = !profile.fotoUrl;
+  } catch { /* Initials remain visible when disconnected. */ }
+}
+async function changePublicPhoto(event) {
+  event.preventDefault();
+  const id = currentSession?.usuarioId; if (!id) return;
+  const buttons = publicProfilePanel.querySelectorAll('button'); buttons.forEach(b => b.disabled = true);
+  const status = document.getElementById('publicPhotoStatus'); status.textContent = 'Guardando…';
+  try {
+    const deleting = event.target.id === 'deletePublicPhoto';
+    const body = new FormData();
+    if (!deleting) {
+      const file = document.getElementById('publicPhoto').files[0];
+      if (!file || file.size > 4000000) throw new Error('Elegí una imagen JPG o PNG de hasta 4 MB.');
+      body.append('foto', file);
+    }
+    const response = await fetch('/api/Perfiles/foto', deleting ? { method:'DELETE' } : { method:'POST', body });
+    if (!response.ok) throw new Error(await extractApiError(response));
+    if (currentSession?.usuarioId !== id) return;
+    status.textContent = deleting ? 'Foto eliminada. Se mostrarán tus iniciales.' : 'Tu foto pública se guardó.';
+    document.getElementById('publicPhotoForm').reset();
+    hydrateAvatars(); await loadOwnProfile();
+  } catch(error) { status.textContent = error.message; }
+  finally { buttons.forEach(b => b.disabled = false); }
+}
+document.getElementById('publicPhotoForm').addEventListener('submit', changePublicPhoto);
+document.getElementById('deletePublicPhoto').addEventListener('click', changePublicPhoto);
+const publicProfileDialog = document.createElement('dialog');
+publicProfileDialog.className = 'public-profile-dialog';
+publicProfileDialog.innerHTML = '<button type="button" class="btn btn-secondary profile-back">Volver</button><div class="public-profile-content"></div>';
+document.body.append(publicProfileDialog);
+publicProfileDialog.querySelector('button').addEventListener('click', () => publicProfileDialog.close());
+let profileRequestSequence = 0;
+async function openPublicProfile(id) {
+  if (!currentSession || !Number.isSafeInteger(id) || id <= 0) return;
+  const sequence = ++profileRequestSequence;
+  const content = publicProfileDialog.querySelector('.public-profile-content');
+  content.textContent = 'Cargando perfil…';
+  if (!publicProfileDialog.open) publicProfileDialog.showModal();
+  try {
+    const response = await fetch(`/api/Perfiles/${id}`);
+    if (!response.ok) throw new Error('Este perfil no está disponible.');
+    const profile = await response.json();
+    if (sequence !== profileRequestSequence) return;
+    content.innerHTML = `<span class="profile-avatar profile-avatar-large"></span><h2>${escapeHtml(profile.nombre)}</h2><p class="identity-badge ${profile.identidadVerificada ? 'verified' : ''}">${identityLabel(profile.rol, profile.identidadVerificada)}</p>`;
+    setAvatar(content.querySelector('.profile-avatar'), profile.fotoUrl, profile.nombre);
+    if (profile.rol === 'Profesional') {
+      const details = document.createElement('p');
+      details.textContent = [profile.descripcion, profile.rubros?.join(' · '), profile.experiencia != null ? `${profile.experiencia} años de experiencia` : ''].filter(Boolean).join('\n');
+      content.append(details);
+    }
+  } catch(error) { if (sequence === profileRequestSequence) content.textContent = error.message; }
+}
+document.addEventListener('click', event => { const button = event.target.closest('[data-profile-id]'); if (button) openPublicProfile(Number(button.dataset.profileId)); });
+document.getElementById('viewOwnProfile').addEventListener('click', () => openPublicProfile(Number(currentSession?.usuarioId)));
+const linePanel = document.createElement('details'); linePanel.className = 'identity-security';
+linePanel.innerHTML = `<summary>Celular y verificaciones</summary><form id="profilePhoneForm"><label for="profilePhoneCountry">País</label><select id="profilePhoneCountry" class="text-input">${countryOptions()}</select><label for="profilePhoneNumber">Celular</label><input id="profilePhoneNumber" class="text-input" type="tel" inputmode="tel" autocomplete="tel-national" required aria-describedby="profilePhoneHint"><small id="profilePhoneHint">Código de área y número, sin el 0 y sin el 15 para Argentina.</small><button class="btn btn-secondary" type="submit">Guardar celular</button></form>
+  <p>Verificá tu número y consultá los datos de tu línea con el operador. Estas comprobaciones no verifican tu rostro ni reemplazan la revisión de identidad.</p>
+  <label class="verification-consent"><input type="checkbox" id="lineConsent"> Autorizo consultar mi número con el operador. Para titularidad se comparan mi DNI y fecha de nacimiento; para ubicación se consulta la zona actual.</label>
+  <p id="lineFeedback" role="status"></p><div id="lineChecks"></div>`;
+securityPanel.before(linePanel);
+let lineLoadSequence = 0;
+async function loadLineVerification() {
+  const id = currentSession?.usuarioId; if (!id) return;
+  const sequence = ++lineLoadSequence;
+  const feedback = document.getElementById('lineFeedback');
+  try {
+    const response = await fetch('/api/Verificaciones');
+    if (!response.ok) throw new Error('No se pudieron consultar las verificaciones.');
+    const data = await response.json();
+    if (id !== currentSession?.usuarioId || sequence !== lineLoadSequence) return;
+    const phoneInput = document.getElementById('profilePhoneNumber');
+    if (!phoneInput.dataset.edited) {
+      const country = phoneCountries.find(([code]) => data.telefono.startsWith('+' + code));
+      document.getElementById('profilePhoneCountry').value = country?.[0] || '54';
+      phoneInput.value = data.telefono.startsWith('+549') ? data.telefono.slice(4) : country ? data.telefono.slice(country[0].length + 1) : data.telefono;
+    }
+    const labels = { numero:'Número de celular', titular:'Datos del titular', sim:'Cambio reciente de SIM', ubicacion:'Ubicación de la línea' };
+    const states = { sin_verificar:'Sin comprobar', abrir:'Pendiente de continuar con el operador', pendiente:'Pendiente de autorización', procesando:'Procesando', vencida:'La comprobación venció', coincide:'Coincidencia confirmada', no_coincide:'No coincide', sin_datos:'El operador no pudo confirmarlo', cambio_reciente:'Se detectó un cambio de SIM en las últimas 24 horas', sin_cambios:'Sin cambios de SIM en las últimas 24 horas', cancelada:'Comprobación cancelada', error_autorizacion:'No se pudo completar la autorización', sin_autorizacion:'El operador no autorizó la consulta', no_disponible:'El operador no pudo completar la consulta' };
+    document.getElementById('lineChecks').innerHTML = data.verificaciones.map(item => `<div class="line-check"><strong>${labels[item.tipo]}</strong><span>${item.verificado ? 'Teléfono verificado' : states[item.estado] || 'Sin comprobar'}${item.prueba ? ' · Entorno de prueba: no acredita verificación real' : ''}</span>${item.disponible ? `<button type="button" class="btn btn-secondary" data-line-check="${item.tipo}">Comprobar</button>` : '<small>La conexión con el operador está pendiente de configuración.</small>'}</div>`).join('');
+  } catch(error) { if (id === currentSession?.usuarioId) feedback.textContent = error.message; }
+}
+document.getElementById('profilePhoneNumber').addEventListener('input', e => { e.target.dataset.edited = 'true'; });
+document.getElementById('profilePhoneCountry').addEventListener('change', () => {
+  document.getElementById('profilePhoneNumber').dataset.edited = 'true';
+  document.getElementById('profilePhoneHint').textContent = document.getElementById('profilePhoneCountry').value === '54' ? 'Código de área y número, sin el 0 y sin el 15.' : 'Ingresá el número nacional con código de área.';
+});
+document.getElementById('profilePhoneForm').addEventListener('submit', async event => {
+  event.preventDefault(); const button = event.target.querySelector('button'); button.disabled = true;
+  const feedback = document.getElementById('lineFeedback');
+  try {
+    const numero = normalizePhone(document.getElementById('profilePhoneNumber').value, document.getElementById('profilePhoneCountry').value);
+    if (!numero) throw new Error('Revisá el código de área y número. Para Argentina, sin 0 ni 15.');
+    const response = await fetch('/api/Perfiles/telefono', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pais:document.getElementById('profilePhoneCountry').value,numero}) });
+    if (!response.ok) throw new Error(await extractApiError(response));
+    delete document.getElementById('profilePhoneNumber').dataset.edited;
+    feedback.textContent = 'Celular guardado. Si cambió el número, deberás verificarlo nuevamente.';
+    await loadLineVerification();
+  } catch(error) { feedback.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+document.getElementById('lineChecks').addEventListener('click', async event => {
+  const button = event.target.closest('[data-line-check]'); if (!button) return;
+  const feedback = document.getElementById('lineFeedback');
+  if (!document.getElementById('lineConsent').checked) { feedback.textContent = 'Autorizá la consulta al operador para continuar.'; return; }
+  if (document.getElementById('profilePhoneNumber').dataset.edited) { feedback.textContent = 'Guardá primero el celular que ingresaste.'; return; }
+  button.disabled = true;
+  feedback.textContent = 'Preparando la comprobación. Para verificar el número, usá los datos móviles de esa línea.';
+  try {
+    const isNative = window.Capacitor?.isNativePlatform?.() === true;
+    const browser = window.Capacitor?.Plugins?.Browser;
+    if (isNative && !window.Capacitor?.isPluginAvailable?.('Browser')) throw new Error('Actualizá SERVILABS para completar la verificación de tu línea.');
+    const body = { tipo:button.dataset.lineCheck, consentimiento:true, nativa:isNative };
+    if (body.tipo === 'ubicacion') {
+      const position = await new Promise((resolve,reject) => navigator.geolocation.getCurrentPosition(resolve,reject,{timeout:15000}));
+      body.latitud = position.coords.latitude; body.longitud = position.coords.longitude;
+    }
+    const response = await fetch('/api/Verificaciones/iniciar', { method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body) });
+    if (!response.ok) throw new Error(await extractApiError(response));
+    const result = await response.json();
+    if (isNative) { await browser.open({url:result.url,toolbarColor:'#101b30'}); button.disabled = false; }
+    else window.location.assign(result.url);
+  } catch(error) { feedback.textContent = error.message || 'No se pudo iniciar la comprobación.'; button.disabled = false; }
+});
+
+let pendingVerificationReturn = false;
+function returnFromLineVerification() {
+  if (!currentSession) { pendingVerificationReturn = true; return; }
+  openAccountPanel(); linePanel.open = true;
+  window.Capacitor?.Plugins?.Browser?.close().catch(() => {});
+}
+if (window.Capacitor?.isNativePlatform?.()) {
+  const appPlugin = window.Capacitor.Plugins?.App;
+  appPlugin?.addListener('appUrlOpen', event => { if (event.url === 'servilabs://verificacion') returnFromLineVerification(); });
+  appPlugin?.getLaunchUrl().then(result => { if (result?.url === 'servilabs://verificacion') returnFromLineVerification(); });
+  if (window.Capacitor.isPluginAvailable?.('Browser')) window.Capacitor.Plugins.Browser.addListener('browserFinished', () => loadLineVerification());
+}
 restoreSavedSession().finally(() => {
   startCoordinationPolling();
   loadHomeData();
+  if (pendingVerificationReturn) returnFromLineVerification();
+  if (new URLSearchParams(location.search).has('verificacion')) {
+    history.replaceState({}, '', location.pathname + '#cuenta');
+    if (currentSession) { openAccountPanel(); linePanel.open = true; }
+  }
 });
 
 document.getElementById('enablePushButton')?.addEventListener('click', async () => {

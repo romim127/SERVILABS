@@ -28,6 +28,7 @@ namespace AppServicios.Api.DTOs
         public string Email { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "El teléfono es obligatorio.")]
+        [AppServicios.Api.Helpers.TelefonoValido]
         [RegularExpression(@"^[0-9+\-\s]{6,30}$", ErrorMessage = "El teléfono solo puede contener números, espacios, + o -.")]
         public string Telefono { get; set; } = string.Empty;
 

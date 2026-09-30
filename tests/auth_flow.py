@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 from playwright.sync_api import sync_playwright, expect
 import psycopg
+from profile_line_flow import Operator, run_checks
 
 ROOT = Path(__file__).resolve().parents[1]
 PG = Path(os.environ.get('PG_BIN', 'C:/Program Files/PostgreSQL/18/bin'))
@@ -33,6 +34,7 @@ def run():
     temp = Path(tempfile.mkdtemp(prefix='servilabs-auth-'))
     dbport, port = free_port(), free_port()
     base = f'http://127.0.0.1:{port}'
+    operator = Operator()
     process = None
     db_started = False
     logfile = (temp / 'api.log').open('w', encoding='utf-8')
@@ -51,6 +53,7 @@ def run():
             'OpenAI__ApiKey': '', 'OPENAI_API_KEY': '',
             'Logging__LogLevel__Default': 'Warning'
         })
+        env.update(operator.env(base))
         process = subprocess.Popen(['dotnet', str(ROOT / 'AppServicios.Api/bin/Debug/net10.0/AppServicios.Api.dll')], cwd=ROOT / 'AppServicios.Api', env=env, stdout=logfile, stderr=logfile)
         def api(path, data=None, token=None, method=None):
             headers = {'Content-Type': 'application/json'}
@@ -152,6 +155,8 @@ def run():
             check(count == 0, 'Profile failure rolls back user creation')
             db.execute('DROP TRIGGER reject_test_client ON "Clientes"')
             db.execute('DROP FUNCTION reject_test_client()')
+        with psycopg.connect(host='127.0.0.1', port=dbport, dbname='postgres', user='postgres', autocommit=True) as db:
+            run_checks(base,api,token,session,resumed['accessToken'],png,operator,db,check)
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(channel='chrome', headless=True)
             context = browser.new_context(viewport={'width': 412, 'height': 915}, service_workers='block')
@@ -194,7 +199,31 @@ def run():
             page.locator('#openAccountButton').click()
             expect(page.locator('#cuenta > details')).to_have_attribute('open', '')
             check(page.locator('#leaveAppButton').count() == 0, 'Only account logout remains')
-            page.locator('.identity-security > summary').click()
+            expect(page.locator('#accountAvatar')).to_contain_text('PN')
+            check(page.locator('#showPanelsButton').count()==0,'Header shows Mi cuenta with avatar without a redundant Paneles button')
+            page.locator('#publicPhoto').set_input_files({'name':'profile.png','mimeType':'image/png','buffer':png})
+            page.locator('#publicPhotoForm button[type=submit]').click()
+            expect(page.locator('#publicPhotoStatus')).to_contain_text('se guardó')
+            expect(page.locator('#accountAvatar img')).to_have_count(1)
+            page.locator('#viewOwnProfile').click()
+            expect(page.locator('.public-profile-dialog')).to_be_visible()
+            expect(page.locator('.public-profile-content')).to_contain_text('Prueba Navegador')
+            expect(page.locator('.public-profile-content')).to_contain_text('Cliente no verificado')
+            page.locator('.profile-back').click()
+            page.locator('#deletePublicPhoto').click()
+            expect(page.locator('#publicPhotoStatus')).to_contain_text('Foto eliminada')
+            expect(page.locator('#accountAvatar img')).to_have_count(0)
+            page.locator('.identity-security > summary').filter(has_text='Celular').click()
+            expect(page.locator('#profilePhoneNumber')).to_have_value('1122334455')
+            page.locator('#lineConsent').check()
+            page.locator('[data-line-check="numero"]').click()
+            page.wait_for_url('**/#cuenta',timeout=15000)
+            expect(page.locator('#lineChecks')).to_contain_text('Coincidencia confirmada',timeout=15000)
+            expect(page.locator('#lineChecks')).to_contain_text('no acredita verificación real')
+            check(True,'Browser verification returns to Mi cuenta with session intact and honest sandbox result')
+            page.locator('.identity-security > summary').filter(has_text='Celular').click()
+
+            page.locator('.identity-security > summary').filter(has_text='Seguridad').click()
             for selector in ['#identityPhoto', '#identityDni']:
                 page.locator(selector).set_input_files({'name': 'test.png', 'mimeType': 'image/png', 'buffer': png})
             page.locator('#identitySubmit').click()
@@ -202,7 +231,7 @@ def run():
             expect(page.locator('#identityBadge')).to_contain_text('Cliente no verificado')
             check(True, 'Security form submits photo and DNI without automatically verifying the client')
 
-            page.locator('#showPanelsButton').click()
+            page.locator('#cuenta > details > summary').click()
             expect(page.locator('.app-panel[open]')).to_have_count(0)
             for width in [320, 390, 768]:
                 page.set_viewport_size({'width': width, 'height': 915})
@@ -292,6 +321,7 @@ def run():
             check(not errors, 'No JavaScript runtime errors: ' + repr(errors))
             browser.close()
     finally:
+        operator.close()
         if process:
             process.terminate()
             try: process.wait(timeout=10)

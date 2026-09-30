@@ -54,16 +54,11 @@ elevar la seguridad del ecosistema.
 
 ## Estado de Open Gateway
 
-La base tecnica ya incluye:
+La aplicación ASP.NET integra Number Verification, KYC Match, SIM Swap y Device Location desde Mi cuenta. Usa las variables OPEN_GATEWAY_* del servicio de Render, OAuth con autorización del usuario y resultados separados de la revisión de identidad. El sandbox nunca otorga una verificación real.
 
-- `auth_gateway.py`: gestor OAuth2 con cache de token en memoria.
-- `security_bunker.py`: sandbox antifraude con IPQualityScore, MaxMind, SIM
-  Swap, Device Location, reporte HTML y persistencia opcional.
-- Variables placeholder en `.env.example` para configurar credenciales reales.
+La foto pública del perfil es independiente de los documentos privados. Android 1.0.7 (8) incorpora el navegador de autorización y regreso a la app.
 
-Hasta recibir credenciales y URLs oficiales del sandbox/productivo de
-Telefonica/Open Gateway, este modulo debe permanecer aislado del flujo real de
-usuarios.
+Ver [configuración, alcance y pruebas](OPEN_GATEWAY_SETUP.md). Los scripts `auth_gateway.py` y `security_bunker.py` se conservan como herramientas anteriores; no se ejecutan en el flujo de la aplicación.
 
 ## Configuracion Sensible
 

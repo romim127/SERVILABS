@@ -61,7 +61,7 @@ namespace AppServicios.Api.Controllers
                     return Conflict("Ese email o DNI ya está registrado. Inicia sesión con tu cuenta.");
                 usuario = new Domain.Usuario
                 {
-                    Nombre = data.Nombre.Trim(), Email = email, Telefono = data.Telefono.Trim(),
+                    Nombre = data.Nombre.Trim(), Email = email, Telefono = AppServicios.Api.Helpers.Telefono.Normalizar(data.Telefono)!,
                     DNI = dni, FechaNacimiento = DateTime.SpecifyKind(data.FechaNacimiento, DateTimeKind.Utc),
                     Rol = "Cliente", Activo = true, VerificadoRenaper = false,
                     RecibeNotificaciones = data.RecibeNotificaciones

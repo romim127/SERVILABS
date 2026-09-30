@@ -49,6 +49,8 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     });
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("OpenGateway").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped<AppServicios.Api.Services.OpenGatewayService>();
 builder.Services.AddOpenApi();
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "AppServicios-Dev-Key-2026-Segura-Preview-32CharsMin";

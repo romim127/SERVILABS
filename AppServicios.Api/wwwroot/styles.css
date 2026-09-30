@@ -2657,3 +2657,24 @@ body:has(#cuenta[open]) { overflow: hidden; }
 :root[data-theme="light"] .identity-badge { color:#855005; border-color:#ad761e; }
 :root[data-theme="light"] .identity-badge.verified { color:#146745; border-color:#267953; }
 #inicio { padding-bottom:6rem; }
+
+/* Public profiles and mobile line verification */
+#openAccountButton, .profile-link, .profile-preview { display:flex; align-items:center; gap:.75rem; }
+.profile-avatar { display:inline-flex; flex:none; position:relative; align-items:center; justify-content:center; width:44px; height:44px; border-radius:50%; overflow:hidden; background:linear-gradient(135deg,#71e7f0,#b08bf5); color:#102039; font-weight:700; }
+.profile-avatar img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.profile-avatar-large { width:80px; height:80px; font-size:1.5rem; }
+.profile-link { border:0; background:transparent; color:inherit; text-align:left; padding:.25rem; max-width:100%; cursor:pointer; }
+.profile-link span:last-child { overflow-wrap:anywhere; min-width:0; }
+.profile-settings { margin-bottom:1.5rem; }
+.profile-settings form, #profilePhoneForm { display:grid; gap:.75rem; margin:1rem 0; }
+.profile-settings input, #profilePhoneForm input, #profilePhoneForm select { max-width:100%; min-width:0; width:100%; box-sizing:border-box; }
+.profile-actions, .profile-preview { display:flex; flex-wrap:wrap; gap:.75rem; }
+.public-profile-dialog { border:1px solid #506582; border-radius:24px; background:var(--bg, #101b30); color:var(--text, #eff5ff); width:min(460px, calc(100vw - 40px)); max-height:85dvh; padding:1.25rem; box-sizing:border-box; overflow:auto; }
+.public-profile-dialog::backdrop { background:#0009; }
+.public-profile-content { padding-top:1.25rem; overflow-wrap:anywhere; white-space:pre-line; }
+.line-check { display:grid; gap:.65rem; padding:1rem 0; border-bottom:1px solid #506582; }
+.verification-consent { display:flex; align-items:flex-start; gap:.6rem; margin:1rem 0; }
+.verification-consent input { flex:none; width:20px; height:20px; }
+@media(max-width:480px) { .profile-actions > button { width:100%; } #openAccountButton { margin-inline:auto; } }
+
+.verification-page { max-width:540px; margin:3rem auto; padding:1.25rem; }
