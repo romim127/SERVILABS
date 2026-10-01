@@ -3866,7 +3866,7 @@ async function runAdminPaymentApproval(paymentId) {
     return;
   }
 
-  setAdminFeedback('Aprobando alta profesional...');
+  setAdminFeedback('Consultando el cobro en Mercado Pago...');
 
   const response = await fetch(`/api/PagosProfesionales/${paymentId}/confirmar`, {
     method: 'POST'
@@ -3877,7 +3877,9 @@ async function runAdminPaymentApproval(paymentId) {
   }
 
   const payment = await response.json();
-  setAdminFeedback(`Alta profesional aprobada. Pago #${payment.id} en estado ${payment.estado || 'Procesado'}.`);
+  setAdminFeedback(payment.aprobado
+    ? `Cobro verificado para el alta profesional. Pago #${payment.pagoId}.`
+    : (payment.message || 'Mercado Pago todavía no confirmó el cobro. El alta sigue pendiente.'));
   await Promise.all([loadCoordinationDashboard(), loadProfessionalDashboard()]);
 }
 
