@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 using AppServicios.Api.Data;
@@ -43,12 +44,18 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddControllers()
+builder.Services.AddScoped<AppServicios.Api.Services.AccessSecurityFilter>();
+builder.Services.AddSingleton<AppServicios.Api.Services.SecurityAlerts>();
+builder.Services.AddHttpClient("Turnstile").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddControllers(options => options.Filters.AddService<AppServicios.Api.Services.AccessSecurityFilter>(-1000))
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     });
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("MercadoPago").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped<AppServicios.Api.Services.PaymentSecurity>();
+builder.Services.AddScoped<AppServicios.Api.Services.FinancialTransactionFilter>();
 builder.Services.AddHttpClient("OpenGateway").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<AppServicios.Api.Services.OpenGatewayService>();
 builder.Services.AddOpenApi();
@@ -74,7 +81,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = signingKey,
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(2)
+            ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 },
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var db = context.HttpContext.RequestServices.GetRequiredService<AppServiciosDbContext>();
+                var principal = context.Principal!;
+                if (!int.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var id)) { context.Fail("Invalid account."); return; }
+                var user = await db.Usuarios.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+                var jti = principal.FindFirstValue("jti");
+                if (user is null || !user.Activo || !principal.IsInRole(user.Rol) || string.IsNullOrEmpty(jti)
+                    || await db.TokensRevocados.AnyAsync(x => x.Id == jti))
+                    context.Fail("Session no longer valid.");
+            }
         };
     });
 
@@ -103,6 +125,7 @@ using (var scope = app.Services.CreateScope())
     catch (Exception ex)
     {
         logger.LogError(ex, "No se pudo inicializar la base de datos al arrancar la app.");
+        throw;
     }
 }
 
@@ -119,6 +142,15 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Content-Security-Policy"] = "frame-ancestors 'none'; object-src 'none'; base-uri 'self'";
+    if (context.Request.Path.StartsWithSegments("/api")) context.Response.Headers.CacheControl = "no-store";
+    await next();
+});
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseCors("AllowAll");

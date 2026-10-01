@@ -103,6 +103,21 @@ namespace AppServicios.Api.Controllers
             return Ok(session);
         }
 
+        [Authorize]
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            var jti = User.FindFirstValue(JwtRegisteredClaimNames.Jti);
+            if (string.IsNullOrEmpty(jti)) return Unauthorized();
+            if (!await _context.TokensRevocados.AnyAsync(x => x.Id == jti))
+            {
+                var expiry = long.TryParse(User.FindFirstValue("exp"), out var exp) ? DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime : DateTime.UtcNow.AddDays(1);
+                await _context.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"TokensRevocados\" (\"Id\", \"Expira\") VALUES ({jti}, {expiry}) ON CONFLICT DO NOTHING");
+            }
+            await _context.TokensRevocados.Where(x => x.Expira < DateTime.UtcNow.AddMinutes(-2)).ExecuteDeleteAsync();
+            return NoContent();
+        }
+
         private PasswordVerificationResult VerifyPassword(Domain.Usuario usuario, string password)
         {
             try { return _passwordHasher.VerifyHashedPassword(usuario, usuario.PasswordHash, password); }
@@ -122,7 +137,7 @@ namespace AppServicios.Api.Controllers
             var ip = GetRequestIp();
             var userAgent = Request.Headers["User-Agent"].ToString();
 
-            if (await IsIpBlockedAsync(ip))
+            if (_configuration.GetValue("Security:EnableIpBlocking", false) && await IsIpBlockedAsync(ip))
             {
                 await AuditoriaHelper.RegistrarAsync(
                     _context,
@@ -143,16 +158,13 @@ namespace AppServicios.Api.Controllers
             var passwordVerification = usuario is null
                 ? PasswordVerificationResult.Failed
                 : VerifyPassword(usuario, password);
-            var legacyPlaintextMatch = usuario is not null
-                && passwordVerification == PasswordVerificationResult.Failed
-                && string.Equals(usuario.PasswordHash, password, StringComparison.Ordinal);
-            var passwordMatches = passwordVerification != PasswordVerificationResult.Failed || legacyPlaintextMatch;
+            var passwordMatches = passwordVerification != PasswordVerificationResult.Failed;
             bool loginExitoso = usuario != null && passwordMatches && usuario.Activo;
 
             // Registrar sesión
             if (usuario != null)
             {
-                if (loginExitoso && (legacyPlaintextMatch || passwordVerification == PasswordVerificationResult.SuccessRehashNeeded))
+                if (loginExitoso && (passwordVerification == PasswordVerificationResult.SuccessRehashNeeded))
                 {
                     usuario.PasswordHash = _passwordHasher.HashPassword(usuario, password);
                 }
@@ -171,7 +183,7 @@ namespace AppServicios.Api.Controllers
                 await _context.SaveChangesAsync();
             }
 
-            if (!passwordMatches && IsSuperAdminEmail(email))
+            if (_configuration.GetValue("Security:EnableIpBlocking", false) && !passwordMatches && IsSuperAdminEmail(email))
             {
                 await RegisterFailedSuperAdminAttemptAsync(ip, email);
             }
@@ -186,7 +198,7 @@ namespace AppServicios.Api.Controllers
                 return Unauthorized("Tu cuenta está suspendida. Contacta al administrador.");
             }
 
-            if (IsSuperAdminEmail(usuario.Email))
+            if (_configuration.GetValue("Security:EnableIpBlocking", false) && IsSuperAdminEmail(usuario.Email))
             {
                 await ClearIpFailedAttemptsAsync(ip, "Login correcto de Super Admin");
             }
@@ -259,7 +271,7 @@ namespace AppServicios.Api.Controllers
             var jwtIssuer = _configuration["Jwt:Issuer"] ?? "AppServicios.Api";
             var jwtAudience = _configuration["Jwt:Audience"] ?? "AppServicios.Client";
             var expiresHours = _configuration.GetValue<int?>("Jwt:ExpiresHours") ?? 8;
-            var expiresAt = DateTime.UtcNow.AddHours(Math.Max(1, expiresHours));
+            var expiresAt = DateTime.UtcNow.AddMinutes(usuario.Rol == "Administrador" ? 30 : Math.Clamp(expiresHours, 1, 24) * 60);
 
             var claims = new List<Claim>
             {
@@ -305,19 +317,7 @@ namespace AppServicios.Api.Controllers
 
         private string GetRequestIp()
         {
-            var cfIp = Request.Headers["CF-Connecting-IP"].FirstOrDefault();
-            if (!string.IsNullOrWhiteSpace(cfIp))
-            {
-                return cfIp.Trim();
-            }
-
-            var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
-            if (!string.IsNullOrWhiteSpace(forwardedFor))
-            {
-                return forwardedFor.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
-                    ?? forwardedFor.Trim();
-            }
-
+            // Forwarded headers are only trusted when processed by configured proxy middleware.
             return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         }
 

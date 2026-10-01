@@ -942,6 +942,7 @@ namespace AppServicios.Api.Controllers
         }
 
         [Authorize]
+        [ServiceFilter(typeof(AppServicios.Api.Services.FinancialTransactionFilter))]
         [HttpPut("{id:int}")]
         public async Task<ActionResult<SolicitudTrabajoDto>> Update(int id, [FromBody] SolicitudTrabajoUpsertDto request)
         {
@@ -958,7 +959,14 @@ namespace AppServicios.Api.Controllers
                 return NotFound();
             }
 
+            if (!IsCurrentUserAdmin() && solicitud.Cliente.UsuarioId != GetAuthenticatedUserId()
+                && solicitud.Profesional?.UsuarioId != GetAuthenticatedUserId() && solicitud.Estado != "Pendiente") return Forbid();
             await ApplyAutomaticSolicitudRulesAsync(request, solicitud);
+            if (await _context.PagosServicioProtegidos.AnyAsync(p => p.SolicitudTrabajoId == id)
+                && (request.ClienteId != solicitud.ClienteId || request.ProfesionalId != solicitud.ProfesionalId
+                    || request.PresupuestoEstimado != solicitud.PresupuestoEstimado || request.PresupuestoFinal != solicitud.PresupuestoFinal
+                    || request.CostoTraslado != solicitud.CostoTraslado || request.Incentivo != solicitud.Incentivo))
+                return Conflict("La solicitud tiene una orden de pago. Sus participantes e importes no pueden cambiarse.");
             await ValidateSolicitudAsync(request, solicitud);
             if (!ModelState.IsValid)
             {
@@ -988,6 +996,7 @@ namespace AppServicios.Api.Controllers
         }
 
         [Authorize(Roles = "Administrador")]
+        [ServiceFilter(typeof(AppServicios.Api.Services.FinancialTransactionFilter))]
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -997,6 +1006,8 @@ namespace AppServicios.Api.Controllers
                 return NotFound();
             }
 
+            if (await _context.PagosServicioProtegidos.AnyAsync(p => p.SolicitudTrabajoId == id))
+                return Conflict("La solicitud tiene movimientos de pago y debe conservarse.");
             _context.SolicitudesTrabajo.Remove(solicitud);
             await _context.SaveChangesAsync();
             return NoContent();
@@ -1065,7 +1076,7 @@ namespace AppServicios.Api.Controllers
 
             if (string.Equals(actor.Rol, "Cliente", StringComparison.OrdinalIgnoreCase))
             {
-                if (actor.Cliente?.Id != request.ClienteId)
+                if (actor.Cliente?.Id != request.ClienteId || (current is not null && actor.Cliente?.Id != current.ClienteId))
                 {
                     ModelState.AddModelError(nameof(request.ClienteId), "Solo puedes operar solicitudes de tu propia cuenta cliente.");
                 }

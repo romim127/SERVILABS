@@ -6,6 +6,8 @@ namespace AppServicios.Api.Domain
     {
         public int Id { get; set; }
         public int ProfesionalId { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
         public Profesional Profesional { get; set; } = null!;
 
         public string Nombre { get; set; } = string.Empty;

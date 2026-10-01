@@ -1,3 +1,4 @@
+using AppServicios.Api.Services;
 using System.Security.Claims;
 using System.Net.Http.Headers;
 using System.Text;
@@ -13,20 +14,24 @@ using Microsoft.EntityFrameworkCore;
 namespace AppServicios.Api.Controllers
 {
     [ApiController]
+    [ServiceFilter(typeof(FinancialTransactionFilter))]
     [Authorize]
     [Route("api/[controller]")]
     public sealed class BilleteraController : ControllerBase
     {
         private readonly AppServiciosDbContext _context;
+        private readonly PaymentSecurity _payments;
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
 
         public BilleteraController(
             AppServiciosDbContext context,
+            PaymentSecurity payments,
             IConfiguration configuration,
             IHttpClientFactory httpClientFactory)
         {
             _context = context;
+            _payments = payments;
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
         }
@@ -168,16 +173,18 @@ namespace AppServicios.Api.Controllers
                 return Ok(ToDto(existing));
             }
 
-            var grossAmount = Math.Round(request.Monto ?? ResolveSolicitudAmount(solicitud), 2, MidpointRounding.AwayFromZero);
+            var grossAmount = Math.Round(ResolveSolicitudAmount(solicitud), 2, MidpointRounding.AwayFromZero);
+            if ((request.Monto.HasValue && request.Monto.Value != grossAmount)
+                || (!string.IsNullOrWhiteSpace(request.Moneda) && request.Moneda.Trim().ToUpperInvariant() != "ARS"))
+                return BadRequest("El importe debe coincidir con la solicitud y la moneda debe ser ARS.");
             if (grossAmount <= 0)
             {
                 return BadRequest("El monto del pago protegido debe ser mayor a cero.");
             }
 
-            var commissionPercent = Math.Max(0m, _configuration.GetValue<decimal?>("Planes:PagoProtegido:ComisionPorcentaje") ?? 0m);
+            var commissionPercent = Math.Clamp(_configuration.GetValue<decimal?>("Planes:PagoProtegido:ComisionPorcentaje") ?? 0m, 0m, 100m);
             var commissionAmount = Math.Round(grossAmount * commissionPercent / 100m, 2, MidpointRounding.AwayFromZero);
             var professionalAmount = grossAmount - commissionAmount;
-            var releaseHours = Math.Max(1, _configuration.GetValue<int?>("Billetera:PagoProtegido:LiberacionAutomaticaHoras") ?? 72);
 
             var pago = new PagoServicioProtegido
             {
@@ -191,9 +198,9 @@ namespace AppServicios.Api.Controllers
                 Moneda = string.IsNullOrWhiteSpace(request.Moneda) ? "ARS" : request.Moneda.Trim().ToUpperInvariant(),
                 Estado = "PendienteDePago",
                 Proveedor = "Mercado Pago",
-                ReferenciaExterna = $"APP-SERV-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
+                ReferenciaExterna = $"APP-SERV-{Guid.NewGuid():N}",
                 Detalle = $"Solicitud #{solicitud.Id} - {solicitud.Servicio?.Nombre ?? "Servicio"}",
-                FechaVencimientoLiberacion = DateTime.UtcNow.AddHours(releaseHours)
+                FechaVencimientoLiberacion = null
             };
 
             _context.PagosServicioProtegidos.Add(pago);
@@ -212,33 +219,10 @@ namespace AppServicios.Api.Controllers
             return CreatedAtAction(nameof(GetPagoPorSolicitud), new { solicitudId = solicitud.Id }, ToDto(pago));
         }
 
+        // Kept as an explicit retired endpoint so old app versions cannot fabricate credit.
         [HttpPost("pagos-protegidos/{id:int}/confirmar-pago-demo")]
-        public async Task<ActionResult<PagoServicioProtegidoDto>> ConfirmarPagoDemo(int id, [FromBody] PagoProtegidoAccionDto request)
-        {
-            var pago = await BasePagosQuery().FirstOrDefaultAsync(p => p.Id == id);
-            if (pago is null)
-            {
-                return NotFound();
-            }
-
-            if (!CanOperateAs(request.UsuarioOperadorId)
-                || !(User.IsInRole("Administrador") || pago.Cliente.UsuarioId == request.UsuarioOperadorId))
-            {
-                return Forbid();
-            }
-
-            if (!string.Equals(pago.Estado, "PendienteDePago", StringComparison.OrdinalIgnoreCase))
-            {
-                return Conflict("Solo se puede confirmar un pago protegido pendiente.");
-            }
-
-            await RetainPaidProtectedPaymentAsync(
-                pago,
-                string.IsNullOrWhiteSpace(request.Detalle) ? "demo-confirmado" : request.Detalle.Trim());
-            await RegistrarAuditoriaPagoAsync(request.UsuarioOperadorId, "Pago protegido retenido", pago);
-
-            return Ok(ToDto(pago));
-        }
+        public ActionResult<PagoServicioProtegidoDto> ConfirmarPagoDemo(int id, [FromBody] PagoProtegidoAccionDto request)
+            => StatusCode(StatusCodes.Status410Gone, "La confirmación demo fue retirada. Verificá el pago con Mercado Pago.");
 
         [HttpPost("pagos-protegidos/{id:int}/mercadopago/preference")]
         public async Task<ActionResult<MercadoPagoPreferenceDto>> CrearPreferenciaMercadoPago(int id, [FromBody] PagoProtegidoAccionDto request)
@@ -310,7 +294,7 @@ namespace AppServicios.Api.Controllers
             var content = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {
-                return StatusCode((int)response.StatusCode, $"Mercado Pago no pudo crear la preferencia: {content}");
+                return StatusCode(502, "Mercado Pago no pudo iniciar el cobro. Reintentá más tarde.");
             }
 
             using var document = JsonDocument.Parse(content);
@@ -334,7 +318,7 @@ namespace AppServicios.Api.Controllers
                 sandboxInitPoint,
                 _configuration["MercadoPago:PublicKey"],
                 sandboxEnabled,
-                "Checkout Pro generado para retener el pago protegido."));
+                "Checkout Pro generado para pagar la solicitud con Mercado Pago."));
         }
 
         [HttpPost("pagos-protegidos/{id:int}/mercadopago/verificar")]
@@ -351,75 +335,23 @@ namespace AppServicios.Api.Controllers
                 return Forbid();
             }
 
-            if (string.Equals(pago.Estado, "PagadoRetenido", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(pago.Estado, "TrabajoCompletado", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(pago.Estado, "Liberado", StringComparison.OrdinalIgnoreCase))
+            if (pago.Estado is "Reintegrado" or "EnDisputa") return Conflict("Este pago requiere revisión administrativa.");
+            var verified = await _payments.Verify(pago.ReferenciaExterna, pago.MontoBruto, pago.Moneda,
+                pago.Estado is "PagadoRetenido" or "TrabajoCompletado" or "Liberado" ? pago.ReferenciaProveedor : null);
+            var providerStatus = verified.Status;
+            var providerId = verified.Id;
+            if (verified.Approved)
             {
-                return Ok(new MercadoPagoVerificationDto(
-                    pago.Id,
-                    pago.Estado,
-                    true,
-                    "approved",
-                    pago.ReferenciaProveedor,
-                    "El pago protegido ya está acreditado en billetera."));
+                await _payments.Claim(providerId, $"serv-{pago.Id}");
+                if (pago.Estado is "PendienteDePago" or "PagoRechazado")
+                {
+                    await RetainPaidProtectedPaymentAsync(pago, providerId);
+                    await RegistrarAuditoriaPagoAsync(request.UsuarioOperadorId, "Cobro Mercado Pago verificado", pago);
+                }
             }
-
-            if (!string.Equals(pago.Estado, "PendienteDePago", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(pago.Estado, "PagoRechazado", StringComparison.OrdinalIgnoreCase))
-            {
-                return Conflict("Solo se verifican pagos pendientes o ya retenidos.");
-            }
-
-            var accessToken = GetMercadoPagoAccessToken();
-            if (string.IsNullOrWhiteSpace(accessToken))
-            {
-                return BadRequest("Configura `MercadoPago:AccessToken` para verificar el pago contra Mercado Pago.");
-            }
-
-            var client = CreateMercadoPagoClient(accessToken);
-            var url = $"{GetMercadoPagoBaseUrl().TrimEnd('/')}/v1/payments/search?external_reference={Uri.EscapeDataString(pago.ReferenciaExterna)}";
-            var response = await client.GetAsync(url);
-            var content = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return StatusCode((int)response.StatusCode, $"Mercado Pago no pudo verificar el pago: {content}");
-            }
-
-            using var document = JsonDocument.Parse(content);
-            string? providerStatus = null;
-            string? providerId = null;
-
-            if (document.RootElement.TryGetProperty("results", out var results)
-                && results.ValueKind == JsonValueKind.Array
-                && results.GetArrayLength() > 0)
-            {
-                var firstResult = results[0];
-                providerStatus = GetStringProperty(firstResult, "status");
-                providerId = GetStringProperty(firstResult, "id");
-            }
-
-            if (string.Equals(providerStatus, "approved", StringComparison.OrdinalIgnoreCase))
-            {
-                await RetainPaidProtectedPaymentAsync(pago, providerId ?? "mercadopago-approved");
-                await RegistrarAuditoriaPagoAsync(request.UsuarioOperadorId, "Mercado Pago acreditado y retenido", pago);
-            }
-            else if (string.Equals(providerStatus, "rejected", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(providerStatus, "cancelled", StringComparison.OrdinalIgnoreCase))
-            {
-                pago.Estado = "PagoRechazado";
-                pago.ReferenciaProveedor = providerId ?? string.Empty;
-                pago.Detalle = $"{pago.Detalle} | MPStatus={providerStatus ?? "N/D"} | MPPaymentId={providerId ?? "N/D"}".Trim();
-                await _context.SaveChangesAsync();
-                await RegistrarAuditoriaPagoAsync(request.UsuarioOperadorId, "Mercado Pago rechazado", pago);
-            }
-
-            var approved = string.Equals(pago.Estado, "PagadoRetenido", StringComparison.OrdinalIgnoreCase);
-            var message = approved
-                ? "Mercado Pago confirmó el cobro y el dinero quedó retenido en billetera."
-                : string.IsNullOrWhiteSpace(providerStatus)
-                    ? "Todavía no hay un pago acreditado en Mercado Pago para esta operación."
-                    : $"Mercado Pago informó el estado `{providerStatus}` para esta operación.";
+            var approved = verified.Approved;
+            var message = approved ? "Mercado Pago confirmó el cobro. Se registró en la cuenta de la solicitud."
+                : "Mercado Pago todavía no confirmó un cobro aprobado para esta orden.";
 
             return Ok(new MercadoPagoVerificationDto(
                 pago.Id,
@@ -445,7 +377,7 @@ namespace AppServicios.Api.Controllers
             }
 
             if (!CanOperateAs(request.UsuarioOperadorId)
-                || !(User.IsInRole("Administrador") || pago.Profesional.UsuarioId == request.UsuarioOperadorId))
+                || !await CanAccessPagoAsync(pago))
             {
                 return Forbid();
             }
@@ -497,6 +429,8 @@ namespace AppServicios.Api.Controllers
 
             pago.Estado = "TrabajoCompletado";
             pago.FechaTrabajoCompletado = DateTime.UtcNow;
+            pago.FechaVencimientoLiberacion = DateTime.UtcNow.AddHours(Math.Max(1,
+                _configuration.GetValue<int?>("Billetera:PagoProtegido:LiberacionAutomaticaHoras") ?? 72));
             await _context.SaveChangesAsync();
             await RegistrarAuditoriaPagoAsync(request.UsuarioOperadorId, "Trabajo completado en pago protegido", pago);
 
@@ -519,7 +453,8 @@ namespace AppServicios.Api.Controllers
 
             var canRelease = User.IsInRole("Administrador")
                 || pago.Cliente.UsuarioId == request.UsuarioOperadorId
-                || (pago.FechaVencimientoLiberacion.HasValue && pago.FechaVencimientoLiberacion.Value <= DateTime.UtcNow);
+                || (pago.Profesional.UsuarioId == request.UsuarioOperadorId && pago.Estado == "TrabajoCompletado"
+                    && pago.FechaVencimientoLiberacion.HasValue && pago.FechaVencimientoLiberacion.Value <= DateTime.UtcNow);
 
             if (!canRelease)
             {
@@ -596,12 +531,13 @@ namespace AppServicios.Api.Controllers
             var pagos = await BasePagosQuery()
                 .Where(p => p.FechaVencimientoLiberacion.HasValue
                     && p.FechaVencimientoLiberacion.Value <= now
-                    && (p.Estado == "PagadoRetenido" || p.Estado == "TrabajoCompletado"))
+                    && p.Estado == "TrabajoCompletado")
                 .ToListAsync();
 
             foreach (var pago in pagos)
             {
-                await ReleasePaymentAsync(pago, request.UsuarioOperadorId, "LiberadoAutomatico", request.Detalle);
+                var error = await ReleasePaymentAsync(pago, request.UsuarioOperadorId, "LiberadoAutomatico", request.Detalle);
+                if (error is not null) return Conflict("No se pudieron conciliar los pagos. Revisá las operaciones antes de reintentar.");
             }
 
             await _context.SaveChangesAsync();
@@ -663,11 +599,16 @@ namespace AppServicios.Api.Controllers
                 return Conflict("Solo se pueden liberar pagos retenidos o trabajos completados.");
             }
 
+            var verified = await _payments.Verify(pago.ReferenciaExterna, pago.MontoBruto, pago.Moneda, pago.ReferenciaProveedor);
+            if (!verified.Approved) throw new PaymentCheckException("El cobro ya no está aprobado en Mercado Pago.");
+            await _payments.Claim(verified.Id, $"serv-{pago.Id}");
             var clienteWallet = await GetOrCreateWalletAsync(pago.Cliente.UsuarioId);
             var profesionalWallet = await GetOrCreateWalletAsync(pago.Profesional.UsuarioId);
 
-            clienteWallet.SaldoRetenido = Math.Max(0m, clienteWallet.SaldoRetenido - pago.MontoBruto);
-            profesionalWallet.SaldoRetenido = Math.Max(0m, profesionalWallet.SaldoRetenido - pago.MontoProfesional);
+            if (clienteWallet.SaldoRetenido < pago.MontoBruto || profesionalWallet.SaldoRetenido < pago.MontoProfesional)
+                throw new PaymentCheckException("Los saldos requieren conciliación. No se modificó la operación.");
+            clienteWallet.SaldoRetenido -= pago.MontoBruto;
+            profesionalWallet.SaldoRetenido -= pago.MontoProfesional;
             profesionalWallet.SaldoDisponible += pago.MontoProfesional;
             Touch(clienteWallet, profesionalWallet);
 
@@ -678,8 +619,8 @@ namespace AppServicios.Api.Controllers
                 pago.Detalle = $"{pago.Detalle} | Liberacion={detail.Trim()}";
             }
 
-            AddMovimiento(clienteWallet, pago, "PagoProtegido", "Liberado", -pago.MontoBruto, "Pago protegido liberado al profesional.");
-            AddMovimiento(profesionalWallet, pago, "CobroProtegido", "Disponible", pago.MontoProfesional, "Cobro liberado en billetera.");
+            AddMovimiento(clienteWallet, pago, "PagoProtegido", "Liberado", -pago.MontoBruto, "Pago registrado para liquidación al profesional.");
+            AddMovimiento(profesionalWallet, pago, "CobroProtegido", "Disponible", pago.MontoProfesional, "Cobro registrado para liquidación. No representa una transferencia bancaria.");
 
             var professional = await _context.Profesionales.FirstOrDefaultAsync(p => p.Id == pago.ProfesionalId);
             if (professional is not null)
@@ -697,16 +638,18 @@ namespace AppServicios.Api.Controllers
             var clienteWallet = await GetOrCreateWalletAsync(pago.Cliente.UsuarioId);
             var profesionalWallet = await GetOrCreateWalletAsync(pago.Profesional.UsuarioId);
 
-            clienteWallet.SaldoRetenido = Math.Max(0m, clienteWallet.SaldoRetenido - pago.MontoBruto);
-            clienteWallet.SaldoDisponible += pago.MontoBruto;
-            profesionalWallet.SaldoRetenido = Math.Max(0m, profesionalWallet.SaldoRetenido - pago.MontoProfesional);
+            if (clienteWallet.SaldoRetenido < pago.MontoBruto || profesionalWallet.SaldoRetenido < pago.MontoProfesional)
+                throw new PaymentCheckException("Los saldos requieren conciliación. No se modificó la operación.");
+            clienteWallet.SaldoRetenido -= pago.MontoBruto;
+            profesionalWallet.SaldoRetenido -= pago.MontoProfesional;
+            await _payments.Refund(pago.ReferenciaProveedor, pago.ReferenciaExterna, pago.MontoBruto, pago.Moneda, $"serv-{pago.Id}");
             Touch(clienteWallet, profesionalWallet);
 
             pago.Estado = "Reintegrado";
             pago.FechaLiberacion = DateTime.UtcNow;
             pago.Detalle = $"{pago.Detalle} | Reintegro={detail.Trim()}";
 
-            AddMovimiento(clienteWallet, pago, "ReintegroProtegido", "Disponible", pago.MontoBruto, "Pago protegido reintegrado al cliente por resolución.");
+            AddMovimiento(clienteWallet, pago, "ReintegroProtegido", "Reintegrado", -pago.MontoBruto, "Devolución confirmada por Mercado Pago al medio de pago original.");
             AddMovimiento(profesionalWallet, pago, "CobroProtegido", "Reintegrado", -pago.MontoProfesional, "Cobro protegido reintegrado al cliente por resolución.");
 
             await RegistrarAuditoriaPagoAsync(actorUserId, "Pago protegido reintegrado", pago);
@@ -774,7 +717,7 @@ namespace AppServicios.Api.Controllers
         {
             var authenticatedId = GetAuthenticatedUserId();
             return authenticatedId.HasValue
-                && (authenticatedId.Value == usuarioId || User.IsInRole("Administrador"));
+                && authenticatedId.Value == usuarioId;
         }
 
         private int? GetAuthenticatedUserId()
@@ -824,16 +767,9 @@ namespace AppServicios.Api.Controllers
                 pago.ReferenciaExterna);
         }
 
-        private HttpClient CreateMercadoPagoClient(string accessToken)
-        {
-            var client = _httpClientFactory.CreateClient();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            return client;
-        }
-
+        private HttpClient CreateMercadoPagoClient(string accessToken) => _payments.Client();
         private string GetMercadoPagoAccessToken() => _configuration["MercadoPago:AccessToken"] ?? string.Empty;
-
-        private string GetMercadoPagoBaseUrl() => _configuration["MercadoPago:BaseUrl"] ?? "https://api.mercadopago.com";
+        private string GetMercadoPagoBaseUrl() => _payments.BaseUrl;
 
         private static string GetStringProperty(JsonElement element, string propertyName)
         {

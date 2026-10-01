@@ -6,6 +6,8 @@ namespace AppServicios.Api.Domain
     {
         public int Id { get; set; }
         public int ClienteId { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
         public Cliente Cliente { get; set; } = null!;
 
         public string Calle { get; set; } = string.Empty;

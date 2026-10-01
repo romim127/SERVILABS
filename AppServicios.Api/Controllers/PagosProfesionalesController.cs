@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using AppServicios.Api.Services;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -12,19 +14,23 @@ using Microsoft.EntityFrameworkCore;
 namespace AppServicios.Api.Controllers
 {
     [ApiController]
+    [ServiceFilter(typeof(FinancialTransactionFilter))]
     [Route("api/[controller]")]
     public sealed class PagosProfesionalesController : ControllerBase
     {
         private readonly AppServiciosDbContext _context;
+        private readonly PaymentSecurity _payments;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
 
         public PagosProfesionalesController(
             AppServiciosDbContext context,
+            PaymentSecurity payments,
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration)
         {
             _context = context;
+            _payments = payments;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
         }
@@ -58,12 +64,14 @@ namespace AppServicios.Api.Controllers
                 .Include(p => p.Usuario)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
-            return pago is null ? NotFound() : Ok(ToDto(pago));
+            return pago is null ? NotFound() : !Owns(pago.UsuarioId) ? Forbid() : Ok(ToDto(pago));
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<ActionResult<PagoProfesionalDto>> Create([FromBody] PagoProfesionalCreateDto request)
         {
+            if (!Owns(request.UsuarioId)) return Forbid();
             await ValidateCreateAsync(request);
             if (!ModelState.IsValid)
             {
@@ -92,8 +100,8 @@ namespace AppServicios.Api.Controllers
                 Moneda = plan.Moneda,
                 Concepto = plan.Nombre,
                 Estado = "Pendiente",
-                Proveedor = string.IsNullOrWhiteSpace(request.Proveedor) ? "Mercado Pago" : request.Proveedor.Trim(),
-                ReferenciaExterna = $"APP-PRO-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
+                Proveedor = "Mercado Pago",
+                ReferenciaExterna = $"APP-PRO-{Guid.NewGuid():N}",
                 Detalle = BuildPaymentDetail(request, plan),
                 FechaCreacion = DateTime.UtcNow
             };
@@ -127,6 +135,8 @@ namespace AppServicios.Api.Controllers
                 return NotFound();
             }
 
+            if (!Owns(pago.UsuarioId)) return Forbid();
+            if (pago.Estado == "Aprobado") return Conflict("La orden ya fue cobrada.");
             var accessToken = GetMercadoPagoAccessToken();
             if (string.IsNullOrWhiteSpace(accessToken))
             {
@@ -173,7 +183,7 @@ namespace AppServicios.Api.Controllers
             var content = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {
-                return StatusCode((int)response.StatusCode, $"Mercado Pago no pudo crear la preferencia: {content}");
+                return StatusCode(502, "Mercado Pago no pudo iniciar el cobro. Reintentá más tarde.");
             }
 
             using var document = JsonDocument.Parse(content);
@@ -211,64 +221,20 @@ namespace AppServicios.Api.Controllers
                 return NotFound();
             }
 
-            var accessToken = GetMercadoPagoAccessToken();
-            if (string.IsNullOrWhiteSpace(accessToken))
+            if (!Owns(pago.UsuarioId)) return Forbid();
+            var verified = await _payments.Verify(pago.ReferenciaExterna, pago.Monto, pago.Moneda);
+            var providerStatus = verified.Status;
+            var providerId = verified.Id;
+            if (verified.Approved)
             {
-                return BadRequest("Configura `MercadoPago:AccessToken` en `appsettings.Development.json` para verificar el pago contra Mercado Pago.");
-            }
-
-            var client = CreateMercadoPagoClient(accessToken);
-            var url = $"{GetMercadoPagoBaseUrl().TrimEnd('/')}/v1/payments/search?external_reference={Uri.EscapeDataString(pago.ReferenciaExterna)}";
-            var response = await client.GetAsync(url);
-            var content = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return StatusCode((int)response.StatusCode, $"Mercado Pago no pudo verificar el pago: {content}");
-            }
-
-            using var document = JsonDocument.Parse(content);
-            string? providerStatus = null;
-            string? providerId = null;
-
-            if (document.RootElement.TryGetProperty("results", out var results)
-                && results.ValueKind == JsonValueKind.Array
-                && results.GetArrayLength() > 0)
-            {
-                var firstResult = results[0];
-                providerStatus = GetStringProperty(firstResult, "status");
-                providerId = GetStringProperty(firstResult, "id");
-            }
-
-            if (string.Equals(providerStatus, "approved", StringComparison.OrdinalIgnoreCase))
-            {
+                await _payments.Claim(providerId, $"pro-{pago.Id}");
                 pago.Estado = "Aprobado";
-                pago.FechaAprobacion = DateTime.UtcNow;
+                pago.FechaAprobacion ??= DateTime.UtcNow;
+                await _context.SaveChangesAsync();
             }
-            else if (string.Equals(providerStatus, "rejected", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(providerStatus, "cancelled", StringComparison.OrdinalIgnoreCase))
-            {
-                pago.Estado = "Rechazado";
-                pago.FechaAprobacion = null;
-            }
-            else
-            {
-                pago.Estado = "Pendiente";
-            }
-
-            if (!string.IsNullOrWhiteSpace(providerStatus) || !string.IsNullOrWhiteSpace(providerId))
-            {
-                pago.Detalle = $"{pago.Detalle} | MPStatus={providerStatus ?? "N/D"} | MPPaymentId={providerId ?? "N/D"}".Trim();
-            }
-
-            await _context.SaveChangesAsync();
-
-            var approved = string.Equals(pago.Estado, "Aprobado", StringComparison.OrdinalIgnoreCase);
-            var message = approved
-                ? "Mercado Pago confirmó el cobro como aprobado."
-                : string.IsNullOrWhiteSpace(providerStatus)
-                    ? "Todavía no hay un pago acreditado en Mercado Pago para esta orden."
-                    : $"Mercado Pago informó el estado `{providerStatus}` para esta operación.";
+            var approved = verified.Approved;
+            var message = approved ? "Mercado Pago confirmó el cobro y los datos de la orden."
+                : "Mercado Pago todavía no confirmó un cobro aprobado para esta orden.";
 
             return Ok(new MercadoPagoVerificationDto(
                 pago.Id,
@@ -281,37 +247,8 @@ namespace AppServicios.Api.Controllers
 
         [Authorize(Roles = "Administrador")]
         [HttpPost("{id:int}/confirmar")]
-        public async Task<ActionResult<PagoProfesionalDto>> Confirmar(int id)
-        {
-            var pago = await _context.PagosProfesionales
-                .Include(p => p.Usuario)
-                .FirstOrDefaultAsync(p => p.Id == id);
-
-            if (pago is null)
-            {
-                return NotFound();
-            }
-
-            if (string.Equals(pago.Estado, "Aprobado", StringComparison.OrdinalIgnoreCase))
-            {
-                return Ok(ToDto(pago));
-            }
-
-            pago.Estado = "Aprobado";
-            pago.FechaAprobacion = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
-            await AuditoriaHelper.RegistrarAsync(
-                _context,
-                pago.UsuarioId,
-                "Pago",
-                "Confirmación",
-                $"El pago #{pago.Id} fue confirmado como aprobado.",
-                "PagoProfesional",
-                pago.Id,
-                pago.ReferenciaExterna);
-
-            return Ok(ToDto(pago));
-        }
+        public Task<ActionResult<MercadoPagoVerificationDto>> Confirmar(int id)
+            => VerifyMercadoPagoPayment(id);
 
         [Authorize(Roles = "Administrador")]
         [HttpPost("{id:int}/rechazar")]
@@ -326,6 +263,7 @@ namespace AppServicios.Api.Controllers
                 return NotFound();
             }
 
+            if (pago.Estado == "Aprobado") return Conflict("Un cobro aprobado debe revisarse con Mercado Pago; no puede rechazarse manualmente.");
             pago.Estado = "Rechazado";
             pago.FechaAprobacion = null;
             await _context.SaveChangesAsync();
@@ -341,6 +279,8 @@ namespace AppServicios.Api.Controllers
 
             return Ok(ToDto(pago));
         }
+
+        private bool Owns(int id) => User.IsInRole("Administrador") || User.FindFirstValue(ClaimTypes.NameIdentifier) == id.ToString();
 
         private async Task ValidateCreateAsync(PagoProfesionalCreateDto request)
         {
@@ -397,16 +337,9 @@ namespace AppServicios.Api.Controllers
             return string.Join(" | ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
         }
 
-        private HttpClient CreateMercadoPagoClient(string accessToken)
-        {
-            var client = _httpClientFactory.CreateClient();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            return client;
-        }
-
+        private HttpClient CreateMercadoPagoClient(string accessToken) => _payments.Client();
         private string GetMercadoPagoAccessToken() => _configuration["MercadoPago:AccessToken"] ?? string.Empty;
-
-        private string GetMercadoPagoBaseUrl() => _configuration["MercadoPago:BaseUrl"] ?? "https://api.mercadopago.com";
+        private string GetMercadoPagoBaseUrl() => _payments.BaseUrl;
 
         private static string GetStringProperty(JsonElement element, string propertyName)
         {

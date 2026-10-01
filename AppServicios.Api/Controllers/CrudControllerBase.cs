@@ -1,96 +1,69 @@
+using System.Security.Claims;
 using AppServicios.Api.Data;
+using AppServicios.Api.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-
-namespace AppServicios.Api.Controllers
+namespace AppServicios.Api.Controllers;
+public abstract class CrudControllerBase<TEntity>(AppServiciosDbContext db) : ControllerBase where TEntity : class
 {
-    public abstract class CrudControllerBase<TEntity> : ControllerBase where TEntity : class
+    protected DbSet<TEntity> Entities => db.Set<TEntity>();
+    int UserId => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+    bool Admin => User.IsInRole("Administrador");
+    IQueryable<TEntity> Owned()
     {
-        private static readonly System.Reflection.PropertyInfo IdProperty = typeof(TEntity).GetProperty("Id")
-            ?? throw new InvalidOperationException($"La entidad {typeof(TEntity).Name} debe tener una propiedad Id.");
-
-        private readonly AppServiciosDbContext _context;
-
-        protected CrudControllerBase(AppServiciosDbContext context)
+        if (Admin) return Entities;
+        if (typeof(TEntity) == typeof(Direccion))
+            return (IQueryable<TEntity>)(object)db.Direcciones.Where(x => x.Cliente.UsuarioId == UserId);
+        if (typeof(TEntity) == typeof(Certificado))
+            return (IQueryable<TEntity>)(object)db.Certificados.Where(x => x.Profesional.UsuarioId == UserId);
+        throw new InvalidOperationException("Resource ownership must be defined.");
+    }
+    async Task<bool> Prepare(TEntity entity)
+    {
+        if (entity is Direccion d)
         {
-            _context = context;
+            d.Cliente = null!;
+            return await db.Clientes.AnyAsync(x => x.Id == d.ClienteId && (Admin || x.UsuarioId == UserId));
         }
-
-        protected DbSet<TEntity> Entities => _context.Set<TEntity>();
-
-        private static int GetEntityId(TEntity entity)
+        if (entity is Certificado c)
         {
-            var value = IdProperty.GetValue(entity);
-            return value is int id ? id : 0;
+            c.Profesional = null!;
+            if (!Admin) c.Verificado = false;
+            return await db.Profesionales.AnyAsync(x => x.Id == c.ProfesionalId && (Admin || x.UsuarioId == UserId));
         }
-
-        private static void SetEntityId(TEntity entity, int id)
-        {
-            IdProperty.SetValue(entity, id);
-        }
-
-        [HttpGet]
-        public virtual async Task<ActionResult<IEnumerable<TEntity>>> GetAll()
-        {
-            var items = await Entities.AsNoTracking().ToListAsync();
-            return Ok(items);
-        }
-
-        [HttpGet("{id:int}")]
-        public virtual async Task<ActionResult<TEntity>> GetById(int id)
-        {
-            var entity = await Entities
-                .AsNoTracking()
-                .FirstOrDefaultAsync(e => EF.Property<int>(e, "Id") == id);
-
-            return entity is null ? NotFound() : Ok(entity);
-        }
-
-        [HttpPost]
-        public virtual async Task<ActionResult<TEntity>> Create([FromBody] TEntity entity)
-        {
-            Entities.Add(entity);
-            await _context.SaveChangesAsync();
-
-            var id = GetEntityId(entity);
-            return CreatedAtAction(nameof(GetById), new { id }, entity);
-        }
-
-        [HttpPut("{id:int}")]
-        public virtual async Task<IActionResult> Update(int id, [FromBody] TEntity entity)
-        {
-            var entityId = GetEntityId(entity);
-            if (entityId != 0 && entityId != id)
-            {
-                return BadRequest("El id de la URL no coincide con el del cuerpo.");
-            }
-
-            var existing = await Entities.FirstOrDefaultAsync(e => EF.Property<int>(e, "Id") == id);
-            if (existing is null)
-            {
-                return NotFound();
-            }
-
-            SetEntityId(entity, id);
-            _context.Entry(existing).CurrentValues.SetValues(entity);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
-        [HttpDelete("{id:int}")]
-        public virtual async Task<IActionResult> Delete(int id)
-        {
-            var existing = await Entities.FirstOrDefaultAsync(e => EF.Property<int>(e, "Id") == id);
-            if (existing is null)
-            {
-                return NotFound();
-            }
-
-            Entities.Remove(existing);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
+        return false;
+    }
+    static readonly System.Reflection.PropertyInfo Id = typeof(TEntity).GetProperty("Id")!;
+    [HttpGet] public virtual async Task<ActionResult<IEnumerable<TEntity>>> GetAll() => Ok(await Owned().AsNoTracking().ToListAsync());
+    [HttpGet("{id:int}")] public virtual async Task<ActionResult<TEntity>> GetById(int id)
+    {
+        var entity = await Owned().AsNoTracking().FirstOrDefaultAsync(x => EF.Property<int>(x, "Id") == id);
+        return entity is null ? NotFound() : Ok(entity);
+    }
+    [HttpPost] public virtual async Task<ActionResult<TEntity>> Create([FromBody] TEntity entity)
+    {
+        if (!await Prepare(entity)) return Forbid();
+        Id.SetValue(entity, 0);
+        Entities.Add(entity);
+        await db.SaveChangesAsync();
+        return CreatedAtAction(nameof(GetById), new { id = Id.GetValue(entity) }, entity);
+    }
+    [HttpPut("{id:int}")] public virtual async Task<IActionResult> Update(int id, [FromBody] TEntity entity)
+    {
+        var existing = await Owned().FirstOrDefaultAsync(x => EF.Property<int>(x, "Id") == id);
+        if (existing is null) return NotFound();
+        if (!await Prepare(entity)) return Forbid();
+        Id.SetValue(entity, id);
+        db.Entry(existing).CurrentValues.SetValues(entity);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+    [HttpDelete("{id:int}")] public virtual async Task<IActionResult> Delete(int id)
+    {
+        var existing = await Owned().FirstOrDefaultAsync(x => EF.Property<int>(x, "Id") == id);
+        if (existing is null) return NotFound();
+        Entities.Remove(existing);
+        await db.SaveChangesAsync();
+        return NoContent();
     }
 }

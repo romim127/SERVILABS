@@ -10,6 +10,9 @@ namespace AppServicios.Api.Data
         {
         }
 
+        public DbSet<TokenRevocado> TokensRevocados { get; set; }
+        public DbSet<LimiteAcceso> LimitesAcceso { get; set; }
+        public DbSet<CobroVerificado> CobrosVerificados { get; set; }
         public DbSet<PerfilPublico> PerfilesPublicos { get; set; }
         public DbSet<VerificacionLinea> VerificacionesLinea { get; set; }
         public DbSet<IdentidadDocumento> IdentidadDocumentos { get; set; }
@@ -36,6 +39,7 @@ namespace AppServicios.Api.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<CobroVerificado>().HasIndex(x => x.Orden).IsUnique();
             modelBuilder.Entity<PerfilPublico>().HasOne(p => p.Usuario).WithOne().HasForeignKey<PerfilPublico>(p => p.UsuarioId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<VerificacionLinea>().HasOne(p => p.Usuario).WithMany().HasForeignKey(p => p.UsuarioId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<VerificacionLinea>().HasIndex(p => new { p.UsuarioId, p.Creado });

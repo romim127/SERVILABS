@@ -1,9 +1,10 @@
-const CACHE_NAME = 'appservicios-shell-v27';
+const CACHE_NAME = 'appservicios-shell-v28';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=26',
-  '/app.js?v=26',
+  '/styles.css?v=28',
+  '/app.js?v=28',
+  '/security-access.js?v=28',
   '/logo.svg',
   '/logo.svg?v=11',
   '/favicon.svg',
@@ -22,6 +23,7 @@ const NETWORK_FIRST_ASSETS = new Set([
   '/index.html',
   '/styles.css',
   '/app.js',
+  '/security-access.js',
   '/manifest.webmanifest'
 ]);
 

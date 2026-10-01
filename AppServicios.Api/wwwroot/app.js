@@ -1403,7 +1403,6 @@ async function runProtectedPaymentAction(paymentId, action) {
   }
 
   const endpoints = {
-    confirm: 'confirmar-pago-demo',
     complete: 'marcar-trabajo-completado',
     release: 'liberar'
   };
@@ -1595,7 +1594,7 @@ async function readAuthSession(response) {
 
 async function authenticateAccount(email, password) {
   const response = await fetch('/api/Auth/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...await window.securityHeaders('login') },
     body: JSON.stringify({ email, password })
   });
   const session = await readAuthSession(response);
@@ -2757,6 +2756,9 @@ async function clearSession() {
   if (document.getElementById('lineConsent')) document.getElementById('lineConsent').checked = false;
   document.querySelectorAll('.public-profile-dialog').forEach(dialog => dialog.close());
   setWizardStep('login');
+  if (currentSession?.accessToken) {
+    try { await fetch('/api/Auth/logout', { method: 'POST' }); } catch { /* Local logout still works offline. */ }
+  }
   currentSession = null;
   currentShellMode = 'wizard';
   locationPromptRequestedForSession = false;
@@ -2950,7 +2952,7 @@ function getRegistrationBaseData() {
 async function createOrUpdateProfessionalUser(userPayload) {
   if (!pendingProfessionalUserId) {
     const response = await fetch('/api/Usuarios', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(userPayload)
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...await window.securityHeaders('register') }, body: JSON.stringify(userPayload)
     });
     if (!response.ok) {
       const message = await extractApiError(response);
@@ -3076,7 +3078,7 @@ async function startProfessionalPayment() {
       if (paymentFeedback) {
         paymentFeedback.classList.remove('is-success');
         paymentFeedback.classList.add('is-error');
-        paymentFeedback.textContent = `Orden generada por ${formatCurrency(payment.monto || 2500)}, pero Mercado Pago aún no está configurado: ${mpError.message || 'usa por ahora el botón de aprobación demo.'}`;
+        paymentFeedback.textContent = `Orden generada por ${formatCurrency(payment.monto || 2500)}, pero Mercado Pago aún no está configurado: ${mpError.message || 'intentá nuevamente cuando el servicio esté disponible.'}`;
       }
     }
   } catch (error) {
@@ -3141,62 +3143,6 @@ async function verifyMercadoPagoPayment() {
       paymentFeedback.classList.remove('is-success');
       paymentFeedback.classList.add('is-error');
       paymentFeedback.textContent = `No se pudo verificar el pago con Mercado Pago: ${error.message || 'intenta nuevamente.'}`;
-    }
-  } finally {
-    updateRegisterGate();
-  }
-}
-
-async function confirmProfessionalPayment() {
-  if (!pendingPaymentId) {
-    if (paymentFeedback) {
-      paymentFeedback.classList.remove('is-success');
-      paymentFeedback.classList.add('is-error');
-      paymentFeedback.textContent = 'Primero genera la orden de pago.';
-    }
-    return;
-  }
-
-  if (confirmPaymentButton) {
-    confirmPaymentButton.disabled = true;
-    confirmPaymentButton.classList.add('is-disabled');
-  }
-
-  try {
-    const response = await fetch(`/api/PagosProfesionales/${pendingPaymentId}/confirmar`, {
-      method: 'POST'
-    });
-
-    if (!response.ok) {
-      throw new Error(await extractApiError(response));
-    }
-
-    const payment = await response.json();
-    paymentApproved = String(payment.estado || '').toLowerCase() === 'aprobado';
-
-    if (paymentState) {
-      paymentState.textContent = paymentApproved ? 'Pago aprobado' : (payment.estado || 'Pago procesado');
-      paymentState.classList.toggle('is-paid', paymentApproved);
-    }
-
-    if (paymentFeedback) {
-      paymentFeedback.classList.remove('is-error');
-      paymentFeedback.classList.toggle('is-success', paymentApproved);
-      paymentFeedback.textContent = paymentApproved
-        ? `Pago demo acreditado correctamente. Referencia ${payment.referenciaExterna}. Ya puedes activar tu perfil profesional.`
-        : 'El pago demo fue procesado, revisa el estado antes de continuar.';
-    }
-  } catch (error) {
-    console.error(error);
-    if (paymentState) {
-      paymentState.textContent = 'Error de pago';
-      paymentState.classList.remove('is-paid');
-    }
-
-    if (paymentFeedback) {
-      paymentFeedback.classList.remove('is-success');
-      paymentFeedback.classList.add('is-error');
-      paymentFeedback.textContent = `No se pudo confirmar el pago demo: ${error.message || 'intenta nuevamente.'}`;
     }
   } finally {
     updateRegisterGate();
@@ -3496,7 +3442,7 @@ async function submitRegistration() {
     } else {
       const clientCoords = await resolveCoordinatesForPayload(data.ubicacion);
       const response = await fetch('/api/Auth/register-client', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...await window.securityHeaders('register') },
         body: JSON.stringify({
           usuario: data.userPayload, latitud: clientCoords.lat, longitud: clientCoords.lng,
           ubicacion: data.ubicacion, preferencias: clientPreferencesInput?.value.trim() || ''
@@ -3860,7 +3806,7 @@ function renderAdminUsers(items, adminMode) {
       ? '<span class="mini-note">Admin actual</span>'
       : `<button type="button" class="action-btn ${item.activo ? 'reject' : 'accept'}" data-admin-action="toggle-active" data-user-id="${item.id}" data-current-active="${item.activo}">${item.activo ? 'Suspender' : 'Reactivar'}</button>`;
     const paymentButton = item.rol === 'Profesional' && item.pagoId && !item.tienePagoAprobado
-      ? `<button type="button" class="action-btn complete" data-admin-action="approve-payment" data-payment-id="${item.pagoId}" data-user-id="${item.id}">Aprobar alta</button>`
+      ? `<button type="button" class="action-btn complete" data-admin-action="approve-payment" data-payment-id="${item.pagoId}" data-user-id="${item.id}">Verificar cobro</button>`
       : '';
 
     return `
@@ -5019,9 +4965,7 @@ if (verifyPaymentButton) {
   verifyPaymentButton.addEventListener('click', verifyMercadoPagoPayment);
 }
 
-if (confirmPaymentButton) {
-  confirmPaymentButton.addEventListener('click', confirmProfessionalPayment);
-}
+
 
 if (loginButton) {
   loginButton.addEventListener('click', handleLogin);

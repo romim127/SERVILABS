@@ -83,6 +83,7 @@ def run():
         if status != 200: print('REGISTRATION RESPONSE', status, str(session)[:3500], flush=True)
         check(status == 200 and session.get('clienteId') and session.get('accessToken'), 'API creates user, client and authenticated session')
         token = session['accessToken']
+        check(api('/api/Billetera/pagos-protegidos/999999/confirmar-pago-demo', {'usuarioOperadorId':session['usuarioId'],'detalle':'security test'},token=token)[0]==410, 'Demo payment confirmation is retired in every environment')
         status, again = api('/api/Auth/register-client', data)
         check(status == 200 and again['clienteId'] == session['clienteId'], 'Retry uses the same account and client')
         bad = copy.deepcopy(data); bad['usuario']['passwordHash'] = 'wrong-password'
